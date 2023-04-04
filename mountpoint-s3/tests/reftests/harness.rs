@@ -17,7 +17,8 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Harness {
-    readdir_limit: usize, // max number of entries that a readdir will return; 0 means no limit
+    /// Max number of entries a readdir reply will allow; 0 means no limit
+    readdir_limit: usize,
     reference: Reference,
     fs: S3Filesystem<Arc<MockClient>, ThreadPool>,
 }
@@ -195,10 +196,10 @@ enum CheckType {
     },
 }
 
-fn run_test(tree: TreeNode, check: CheckType, readdir_limit: usize) {
+fn run_test(tree: TreeNode, check: CheckType, readdir_reply_limit: usize, readdir_page_size: usize) {
     let test_prefix = Prefix::new("test_prefix/").expect("valid prefix");
     let config = S3FilesystemConfig {
-        readdir_size: 5,
+        readdir_page_size,
         ..Default::default()
     };
     let (client, fs) = make_test_filesystem("harness", &test_prefix, config);
@@ -210,7 +211,7 @@ fn run_test(tree: TreeNode, check: CheckType, readdir_limit: usize) {
 
     let reference = build_reference(namespace);
 
-    let harness = Harness::new(fs, reference, readdir_limit);
+    let harness = Harness::new(fs, reference, readdir_reply_limit);
 
     futures::executor::block_on(async move {
         match check {
@@ -227,13 +228,13 @@ proptest! {
     })]
 
     #[test]
-    fn reftest_random_tree_full(readdir_limit in 0..10usize, tree in gen_tree(5, 100, 5, 20)) {
-        run_test(tree, CheckType::FullTree, readdir_limit);
+    fn reftest_random_tree_full(readdir_limit in 0..5usize, readdir_page_size in 1..8usize, tree in gen_tree(5, 100, 5, 20)) {
+        run_test(tree, CheckType::FullTree, readdir_limit, readdir_page_size);
     }
 
     #[test]
-    fn reftest_random_tree_single(tree in gen_tree(5, 100, 5, 20), path_index: usize) {
-        run_test(tree, CheckType::SinglePath { path_index }, 0);
+    fn reftest_random_tree_single(readdir_page_size in 1..8usize, tree in gen_tree(5, 100, 5, 20), path_index: usize) {
+        run_test(tree, CheckType::SinglePath { path_index }, 0, readdir_page_size);
     }
 }
 
@@ -249,6 +250,7 @@ fn random_tree_regression_basic() {
         )])),
         CheckType::FullTree,
         0,
+        5,
     );
 }
 
@@ -267,6 +269,7 @@ fn random_tree_regression_directory_order() {
         ])),
         CheckType::FullTree,
         0,
+        5,
     );
 }
 
@@ -282,6 +285,7 @@ fn random_tree_regression_invalid_name1() {
         )])),
         CheckType::FullTree,
         0,
+        5,
     );
 }
 
@@ -297,6 +301,7 @@ fn random_tree_regression_invalid_name2() {
         )])),
         CheckType::FullTree,
         0,
+        5,
     )
 }
 
@@ -312,6 +317,7 @@ fn random_tree_regression_directory_shadow() {
         )])),
         CheckType::FullTree,
         0,
+        5,
     )
 }
 
@@ -327,5 +333,22 @@ fn random_tree_regression_directory_shadow_lookup() {
         )])),
         CheckType::SinglePath { path_index: 1 },
         0,
+        5,
+    )
+}
+
+#[test]
+fn random_tree_regression_readdir_page_size() {
+    run_test(
+        TreeNode::Directory(BTreeMap::from([(
+            Name("a".to_string()),
+            TreeNode::Directory(BTreeMap::from([
+                (Name("a".to_string()), TreeNode::File(Content(0, FileSize::Small(0)))),
+                (Name("a/".to_string()), TreeNode::File(Content(0, FileSize::Small(0)))),
+            ])),
+        )])),
+        CheckType::FullTree,
+        0,
+        1,
     )
 }

@@ -36,7 +36,7 @@ where
 {
     let readdir_size = 5usize;
     let filesystem_config = S3FilesystemConfig {
-        readdir_size,
+        readdir_page_size: readdir_size,
         ..Default::default()
     };
 

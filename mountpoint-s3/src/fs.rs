@@ -59,7 +59,7 @@ pub struct S3FilesystemConfig {
     /// Stat time to live in kernel cache
     pub stat_ttl: Duration,
     /// Readdir page size
-    pub readdir_size: usize,
+    pub readdir_page_size: usize,
     /// User id
     pub uid: u32,
     /// Group id
@@ -82,7 +82,7 @@ impl Default for S3FilesystemConfig {
             // very small TTL, enough to debounce the FUSE requests while being much much smaller
             // than S3 ListObjects latency.
             stat_ttl: Duration::from_millis(1),
-            readdir_size: 100,
+            readdir_page_size: 100,
             uid,
             gid,
             dir_mode: 0o755,
@@ -419,7 +419,10 @@ where
     pub async fn opendir(&self, parent: InodeNo, _flags: i32) -> Result<Opened, libc::c_int> {
         trace!("fs:opendir with parent {:?} flags {:?}", parent, _flags);
 
-        let inode_handle = self.superblock.readdir(&self.client, parent, 1000).await?;
+        let inode_handle = self
+            .superblock
+            .readdir(&self.client, parent, self.config.readdir_page_size)
+            .await?;
 
         let fh = self.next_handle();
         let handle = DirHandle {

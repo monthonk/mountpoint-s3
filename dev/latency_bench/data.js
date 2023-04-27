@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1682588186972,
+  "lastUpdate": 1682590002637,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -455,6 +455,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 48.3145347,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "d2f9775ecdeef85f143bd404c323673b82e8f711",
+          "message": "Less validation\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2023-04-27T09:56:05Z",
+          "tree_id": "a3a6819ef360dc249cb0c7e679fdf8107ceb4b03",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/d2f9775ecdeef85f143bd404c323673b82e8f711"
+        },
+        "date": 1682590002032,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.067,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.178,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.167,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 10.619,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 84.7144021,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 59.9619797,
             "unit": "milliseconds"
           }
         ]

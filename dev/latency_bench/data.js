@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1683020792746,
+  "lastUpdate": 1683031686732,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -887,6 +887,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 92.51762240000001,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "d5bb12801832d9046ed18e0514a016fec7f493e1",
+          "message": "Should be slower\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2023-05-02T12:35:22Z",
+          "tree_id": "42f11d053a8da6ae8a808d659c3540bcd697eb77",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/d5bb12801832d9046ed18e0514a016fec7f493e1"
+        },
+        "date": 1683031685805,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.062,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.181,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.123,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.024,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 66.3847094,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 51.9610071,
             "unit": "milliseconds"
           }
         ]

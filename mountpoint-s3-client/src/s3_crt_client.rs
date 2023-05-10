@@ -3,7 +3,7 @@ use std::future::Future;
 use std::ops::Range;
 use std::os::unix::prelude::OsStrExt;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
@@ -28,7 +28,7 @@ use futures::channel::oneshot;
 use percent_encoding::{percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use pin_project::pin_project;
 use thiserror::Error;
-use tracing::{debug, error, trace, warn, Span};
+use tracing::{debug, error, trace, Span};
 
 use crate::endpoint::{AddressingStyle, Endpoint, EndpointError};
 use crate::object_client::*;
@@ -49,6 +49,30 @@ pub(crate) mod head_bucket;
 pub(crate) mod head_object;
 pub(crate) mod list_objects;
 pub(crate) mod put_object;
+
+/// Some requests are expected failures, and we want to log those at a different level to unexpected
+/// ones.
+fn status_code_to_log_level(status_code: i32) -> tracing::Level {
+    if (200..=399).contains(&status_code) || status_code == 404 {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::WARN
+    }
+}
+
+/// `tracing` doesn't allow dynamic levels but we want them to handle some requests differently.
+/// https://github.com/tokio-rs/tracing/issues/372
+macro_rules! event {
+    ($level:expr, $($args:tt)*) => {
+        match $level {
+            ::tracing::Level::ERROR => ::tracing::event!(::tracing::Level::ERROR, $($args)*),
+            ::tracing::Level::WARN => ::tracing::event!(::tracing::Level::WARN, $($args)*),
+            ::tracing::Level::INFO => ::tracing::event!(::tracing::Level::INFO, $($args)*),
+            ::tracing::Level::DEBUG => ::tracing::event!(::tracing::Level::DEBUG, $($args)*),
+            ::tracing::Level::TRACE => ::tracing::event!(::tracing::Level::TRACE, $($args)*),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct S3ClientConfig {
@@ -211,33 +235,72 @@ impl S3CrtClient {
     ) -> Result<S3HttpRequest<T, E>, S3RequestError> {
         let (tx, rx) = oneshot::channel::<ObjectClientResult<T, E, S3RequestError>>();
 
+        let span_telemetry = request_span.clone();
         let span_body = request_span.clone();
         let span_finish = request_span;
 
-        let request_id = Arc::new(Mutex::new(None));
-        let request_id_clone = Arc::clone(&request_id);
         let start_time = Instant::now();
-        let mut first_body_part = true;
+        let first_body_part = Arc::new(AtomicBool::new(true));
+        let first_body_part_clone = Arc::clone(&first_body_part);
 
         let mut options = MetaRequestOptions::new();
         options
             .message(message.inner)
             .endpoint(message.uri)
-            .on_headers(move |headers, response_status| {
-                if let Ok(id) = headers.get("x-amz-request-id") {
-                    let id = id.value().to_string_lossy().to_string();
-                    *request_id.lock().unwrap() = Some(id);
+            .on_telemetry(move |metrics| {
+                let _guard = span_telemetry.enter();
+
+                let http_status = metrics.status_code().ok().flatten().unwrap_or(-1);
+                let request_id = metrics
+                    .request_id()
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| "<unknown>".into());
+                let duration = metrics.total_duration().ok();
+                let time_to_first_byte = metrics.time_to_first_byte().ok();
+                let request_failure = !(200..299).contains(&http_status);
+
+                let log_level = status_code_to_log_level(http_status);
+
+                let message = if request_failure {
+                    "request failed"
+                } else {
+                    "request finished"
+                };
+                event!(
+                    log_level,
+                    http_status,
+                    ?duration,
+                    ?time_to_first_byte,
+                    request_id,
+                    "{}",
+                    message
+                );
+
+                // TODO get the actual request type from the CRT in addition to this
+                let op = span_telemetry.metadata().map(|m| m.name()).unwrap_or("unknown");
+
+                if let Some(time_to_first_byte) = time_to_first_byte {
+                    metrics::histogram!("s3.requests.first_byte_latency_us", time_to_first_byte.as_micros() as f64, "op" => op);
                 }
+                if let Some(total_duration) = duration {
+                    metrics::histogram!("s3.requests.total_latency_us", total_duration.as_micros() as f64, "op" => op);
+                }
+                if request_failure {
+                    metrics::counter!("s3.requests.failures", 1, "op" => op, "status" => format!("{http_status}"));
+                }
+                metrics::counter!("s3.requests", 1, "op" => op);
+            })
+            .on_headers(move |headers, response_status| {
                 (on_headers)(headers, response_status);
             })
             .on_body(move |range_start, data| {
                 let _guard = span_body.enter();
 
-                if first_body_part {
-                    first_body_part = false;
+                if first_body_part.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).ok() == Some(true) {
                     let latency = start_time.elapsed().as_micros() as f64;
                     let op = span_body.metadata().map(|m| m.name()).unwrap_or("unknown");
-                    metrics::histogram!("s3.first_byte_latency_us", latency, "op" => op);
+                    metrics::histogram!("s3.meta_requests.first_byte_latency_us", latency, "op" => op);
                 }
 
                 trace!(start = range_start, length = data.len(), "body part received");
@@ -247,32 +310,34 @@ impl S3CrtClient {
             .on_finish(move |request_result| {
                 let _guard = span_finish.enter();
 
-                // Header callback won't be invoked concurrently, so we can hold onto this lock
-                let request_id = request_id_clone.lock().unwrap();
                 let op = span_finish.metadata().map(|m| m.name()).unwrap_or("unknown");
 
                 metrics::counter!("s3.meta_requests", 1, "op" => op);
 
-                let request_id = request_id.as_deref().unwrap_or("unknown");
-                let duration_us = start_time.elapsed().as_micros();
-                if request_result.is_err() {
-                    let res_status_code = request_result.response_status;
-                    if (200..=399).contains(&res_status_code) || res_status_code == 404 {
-                        // Use debug level for less severe response codes.
-                        debug!(request_id, duration_us, ?request_result, "request failed");
-                    } else {
-                        warn!(request_id, duration_us, ?request_result, "request failed");
-                    }
+                // Some requests don't have a body to stream back, so calculate TTFB now
+                if first_body_part_clone.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).ok() == Some(true)  {
+                    let latency = start_time.elapsed().as_micros() as f64;
+                    let op = span_finish.metadata().map(|m| m.name()).unwrap_or("unknown");
+                    metrics::histogram!("s3.meta_requests.first_byte_latency_us", latency, "op" => op);
+                }
 
-                    // If it's not a real HTTP status, encode the CRT error instead
+                let duration = start_time.elapsed();
+                metrics::histogram!("s3.meta_requests.total_latency_us", duration.as_micros() as f64, "op" => op);
+
+                let log_level = status_code_to_log_level(request_result.response_status);
+                if request_result.is_err() {
+                    let log_level = status_code_to_log_level(request_result.response_status);
+                    event!(log_level, ?duration, ?request_result, "meta request failed");
+
+                    // If it's not a real HTTP status, encode the CRT error in the metric instead
                     let error_status = if request_result.response_status >= 100 {
                         request_result.response_status
                     } else {
                         -request_result.crt_error.raw_error()
                     };
-                    metrics::counter!("s3.meta_request_failures", 1, "op" => op, "status" => format!("{error_status}"));
+                    metrics::counter!("s3.meta_requests.failures", 1, "op" => op, "status" => format!("{error_status}"));
                 } else {
-                    debug!(request_id, duration_us, "request finished");
+                    event!(log_level, ?duration, "meta request finished");
                 }
 
                 let result = on_finish(request_result);

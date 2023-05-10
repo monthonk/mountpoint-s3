@@ -18,6 +18,7 @@ use std::os::unix::prelude::OsStrExt;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
+use std::time::Duration;
 
 /// A client for high-throughput access to Amazon S3
 #[derive(Debug)]
@@ -84,13 +85,13 @@ impl ClientConfig {
 
     /// Size of parts the files will be downloaded or uploaded in.
     pub fn part_size(&mut self, part_size: usize) -> &mut Self {
-        self.inner.part_size = part_size;
+        self.inner.part_size = part_size as u64;
         self
     }
 
     /// If the part size needs to be adjusted for service limits, this is the maximum size it will be adjusted to.
     pub fn max_part_size(&mut self, max_part_size: usize) -> &mut Self {
-        self.inner.max_part_size = max_part_size;
+        self.inner.max_part_size = max_part_size as u64;
         self
     }
 
@@ -107,6 +108,9 @@ impl ClientConfig {
         self
     }
 }
+
+/// Callback for telemetry received as part of a successful meta request.
+type TelemetryCallback = Box<dyn Fn(&RequestMetrics) + Send>;
 
 /// Callback for when headers are received as part of a successful HTTP request. Given (headers, response_status).
 type HeadersCallback = Box<dyn FnMut(&Headers, i32) + Send>;
@@ -131,6 +135,9 @@ struct MetaRequestOptionsInner<'a> {
 
     /// Owned signing config, if provided.
     signing_config: Option<SigningConfig>,
+
+    /// Telemetry callback, if provided
+    on_telemetry: Option<TelemetryCallback>,
 
     /// Headers callback, if provided.
     on_headers: Option<HeadersCallback>,
@@ -185,6 +192,7 @@ impl<'a> MetaRequestOptions<'a> {
         // the address of the inner struct is.
         let options = Box::new(MetaRequestOptionsInner {
             inner: aws_s3_meta_request_options {
+                telemetry_callback: Some(meta_request_telemetry_callback),
                 headers_callback: Some(meta_request_headers_callback),
                 body_callback: Some(meta_request_receive_body_callback),
                 finish_callback: Some(meta_request_finish_callback),
@@ -195,6 +203,7 @@ impl<'a> MetaRequestOptions<'a> {
             message: None,
             endpoint: None,
             signing_config: None,
+            on_telemetry: None,
             on_headers: None,
             on_body: None,
             on_finish: None,
@@ -242,6 +251,15 @@ impl<'a> MetaRequestOptions<'a> {
         options.signing_config = Some(signing_config);
         options.inner.signing_config =
             options.signing_config.as_mut().unwrap().to_inner_ptr() as *mut aws_signing_config_aws;
+        self
+    }
+
+    /// Provide a callback to run when telemetry for individual requests made by this meta request
+    /// arrive. This callback may be invoked concurrently by multiple threads.
+    pub fn on_telemetry(&mut self, callback: impl Fn(&RequestMetrics) + Send + 'static) -> &mut Self {
+        // SAFETY: we aren't moving out of the struct.
+        let options = unsafe { Pin::get_unchecked_mut(Pin::as_mut(&mut self.0)) };
+        options.on_telemetry = Some(Box::new(callback));
         self
     }
 
@@ -306,6 +324,24 @@ impl From<MetaRequestType> for aws_s3_meta_request_type {
             MetaRequestType::PutObject => aws_s3_meta_request_type::AWS_S3_META_REQUEST_TYPE_PUT_OBJECT,
             MetaRequestType::CopyObject => aws_s3_meta_request_type::AWS_S3_META_REQUEST_TYPE_COPY_OBJECT,
         }
+    }
+}
+
+/// SAFETY: Don't call this function directly, only called by the CRT as a callback.
+unsafe extern "C" fn meta_request_telemetry_callback(
+    _request: *mut aws_s3_meta_request,
+    metrics: *mut aws_s3_request_metrics,
+    user_data: *mut libc::c_void,
+) {
+    // SAFETY: user_data always will be a MetaRequestOptionsInner since that's what we set it to
+    // in MetaRequestOptions::new.
+    let user_data = MetaRequestOptionsInner::from_user_data_ptr(user_data);
+
+    if let Some(callback) = user_data.on_telemetry.as_ref() {
+        let metrics =
+            NonNull::new(metrics as *mut aws_s3_request_metrics).expect("Got metrics == NULL in request callback");
+        let metrics = RequestMetrics { inner: metrics };
+        callback(&metrics);
     }
 }
 
@@ -618,6 +654,87 @@ impl MetaRequestResult {
             crt_error: inner.error_code.into(),
             error_response_headers,
             error_response_body,
+        }
+    }
+}
+
+/// Metrics for an individual request
+#[derive(Debug)]
+pub struct RequestMetrics {
+    inner: NonNull<aws_s3_request_metrics>,
+}
+
+impl RequestMetrics {
+    /// Return the request ID for this request, or `Ok(None)` if unavailable (e.g. the request
+    /// failed before sending).
+    pub fn request_id(&self) -> Result<Option<String>, Error> {
+        let mut out: *const aws_string = std::ptr::null();
+        // SAFETY: `inner` is a valid aws_s3_request_metrics
+        let result = unsafe { aws_s3_request_metrics_get_request_id(self.inner.as_ptr(), &mut out).ok_or_last_error() };
+        Self::ok_or_none_if_unavailable(result, || {
+            assert!(!out.is_null(), "request ID should be available");
+            // SAFETY: `out` is now a valid pointer to an aws_string, and we'll copy the bytes
+            // out of it so it won't live beyond this function call
+            unsafe {
+                let byte_cursor = aws_byte_cursor_from_string(out);
+                let os_str = OsStr::from_bytes(aws_byte_cursor_as_slice(&byte_cursor));
+                os_str.to_string_lossy().into_owned()
+            }
+        })
+    }
+
+    /// Return the response status code for this request, or `Ok(None)` if unavailable (e.g. the
+    /// request failed before sending).
+    pub fn status_code(&self) -> Result<Option<i32>, Error> {
+        let mut out: i32 = 0;
+        // SAFETY: `inner` is a valid aws_s3_request_metrics
+        let result = unsafe {
+            aws_s3_request_metrics_get_response_status_code(self.inner.as_ptr(), &mut out).ok_or_last_error()
+        };
+        Self::ok_or_none_if_unavailable(result, || out)
+    }
+
+    /// Return the response headers for this request, or `Ok(None)` if unavailable (e.g. the request
+    /// failed before sending).
+    pub fn headers(&self) -> Result<Option<Headers>, Error> {
+        let mut out: *mut aws_http_headers = std::ptr::null_mut();
+        let result =
+            // SAFETY: `inner` is a valid aws_s3_request_metrics
+            unsafe { aws_s3_request_metrics_get_response_headers(self.inner.as_ptr(), &mut out).ok_or_last_error() };
+        Self::ok_or_none_if_unavailable(result, || {
+            assert!(!out.is_null(), "headers should be available");
+            // SAFETY: `out` is now a valid pointer to an aws_http_headers, and [Headers::from_crt]
+            // will acquire a reference to keep it alive after this function call
+            unsafe { Headers::from_crt(NonNull::new_unchecked(out)) }
+        })
+    }
+
+    /// Return the total duration for this request
+    pub fn total_duration(&self) -> Result<Duration, Error> {
+        let mut out: u64 = 0;
+        // SAFETY: `inner` is a valid aws_s3_request_metrics
+        unsafe { aws_s3_request_metrics_get_total_duration_ns(self.inner.as_ptr(), &mut out) };
+        Ok(Duration::from_nanos(out))
+    }
+
+    /// Return the first-byte latency for this request (time first byte received - time last byte sent)
+    pub fn time_to_first_byte(&self) -> Result<Duration, Error> {
+        let mut send_end: u64 = 0;
+        let mut receive_start: u64 = 0;
+        // SAFETY: `inner` is a valid aws_s3_request_metrics
+        unsafe {
+            aws_s3_request_metrics_get_send_end_timestamp_ns(self.inner.as_ptr(), &mut send_end);
+            aws_s3_request_metrics_get_receive_start_timestamp_ns(self.inner.as_ptr(), &mut receive_start);
+        };
+        Ok(Duration::from_nanos(receive_start - send_end))
+    }
+
+    /// Handle request metrics that might not be available by returning Ok(None) instead of an Err.
+    fn ok_or_none_if_unavailable<T, F: FnOnce() -> T>(result: Result<(), Error>, ret: F) -> Result<Option<T>, Error> {
+        match result {
+            Ok(()) => Ok(Some(ret())),
+            Err(e) if e.raw_error() as u32 == aws_s3_errors::AWS_ERROR_S3_METRIC_DATA_NOT_AVAILABLE as u32 => Ok(None),
+            Err(e) => Err(e),
         }
     }
 }

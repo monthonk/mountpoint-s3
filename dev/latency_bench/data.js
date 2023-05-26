@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1684316955581,
+  "lastUpdate": 1685116677608,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "1a3f7b430d4fde708ad27f78934aaf5af48a0594",
-          "message": "Merge branch 'internal_checksum' into bench_test",
-          "timestamp": "2023-04-27T14:13:31Z",
-          "tree_id": "a11b9f9dc3972ae79f16bcb65a3d9c03485dda8f",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/1a3f7b430d4fde708ad27f78934aaf5af48a0594"
-        },
-        "date": 1682605649942,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.067,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.167,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.097,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.881,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 76.2320632,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 45.7978478,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1080,6 +1026,50 @@ window.BENCHMARK_DATA = {
             "name": "time_to_first_byte_read_small_file",
             "value": 45.6577838,
             "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "bornholt@amazon.com",
+            "name": "James Bornholt",
+            "username": "jamesbornholt"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fe4d717eba54ad48d17e23a06cffff9bfb6c1591",
+          "message": "Integrate new CRT telemetry APIs (#261)\n\n* Integrate new CRT telemetry APIs\r\n\r\nThe telemetry APIs let us get metrics at a per-request granularity. This\r\nlets us deprecate some of the code we used to have for parsing out\r\nthings like request IDs from a meta request, and also break out our\r\nmetrics by request type. The new telemetry callback is invoked once per\r\nrequest sent by the CRT.\r\n\r\nSigned-off-by: James Bornholt <bornholt@amazon.com>\r\n\r\n* Update mountpoint-s3-client/src/s3_crt_client.rs\r\n\r\nCo-authored-by: Alessandro Passaro <alessandro.passaro@gmail.com>\r\nSigned-off-by: James Bornholt <bornholt@amazon.com>\r\n\r\n---------\r\n\r\nSigned-off-by: James Bornholt <bornholt@amazon.com>\r\nCo-authored-by: Alessandro Passaro <alessandro.passaro@gmail.com>",
+          "timestamp": "2023-05-26T09:59:13-05:00",
+          "tree_id": "a1ca847c5c2e3f639cb6791f015967a3772a98c2",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/fe4d717eba54ad48d17e23a06cffff9bfb6c1591"
+        },
+        "date": 1685116676343,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.787,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 1.364,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 7.349,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 66.966,
+            "unit": "seconds"
           }
         ]
       }

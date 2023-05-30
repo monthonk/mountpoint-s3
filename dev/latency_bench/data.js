@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1685116677608,
+  "lastUpdate": 1685445930811,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "b20a3e61a4c8fc3e4831a159ab317ccb1b7438fe",
-          "message": "Merge branch 'internal_checksum' into bench_test\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-04-28T09:09:42Z",
-          "tree_id": "9b42234bef95935f9e5f98f043a1781fbdfb343c",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/b20a3e61a4c8fc3e4831a159ab317ccb1b7438fe"
-        },
-        "date": 1682673750968,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.07,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.166,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.096,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.542,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 71.49077220000001,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 47.1776957,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1069,6 +1015,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "readdir_100000",
             "value": 66.966,
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "04ac3516882b07bacb24bf046b6da20829036b18",
+          "message": "Update to aws-c-common v0.8.22 (#264)\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2023-05-26T16:40:12Z",
+          "tree_id": "f4fad569d3ace822a92534abb6b2d9ae83771601",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/04ac3516882b07bacb24bf046b6da20829036b18"
+        },
+        "date": 1685445929519,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.727,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 1.386,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 7.34,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 67.534,
             "unit": "seconds"
           }
         ]

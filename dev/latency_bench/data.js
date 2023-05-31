@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1685445930811,
+  "lastUpdate": 1685541182984,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "1bdc5375be4b8aff3466c57d73a227470b3c2db0",
-          "message": "Merge branch 'part_queue' into bench_test",
-          "timestamp": "2023-04-28T13:30:22Z",
-          "tree_id": "11f9e6493d0fe201296672cddc8087cca3c151e4",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/1bdc5375be4b8aff3466c57d73a227470b3c2db0"
-        },
-        "date": 1682690544119,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.071,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.17,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.132,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.752,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 249.9900696,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 74.6674841,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1059,6 +1005,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "readdir_100000",
             "value": 67.534,
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e243ef78523119a6a405ea869e862411b123cfa8",
+          "message": "Exclude test files from crt-sys crate (#265)\n\nSignificantly reduce the size of the `mountpoint-s3-crt-sys` crate, in order to stay under the 10MB threshold.\r\n\r\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2023-05-31T10:38:28+01:00",
+          "tree_id": "57d41f424fca0dbc9bf92cd164cc63b0489cc0a6",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/e243ef78523119a6a405ea869e862411b123cfa8"
+        },
+        "date": 1685541181670,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.755,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 1.374,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 7.218,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 67.087,
             "unit": "seconds"
           }
         ]

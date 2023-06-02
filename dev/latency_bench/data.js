@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1685697224960,
+  "lastUpdate": 1685697246983,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "d6bb3f178e2858d1c93e4b2e3fbf31348c5ffca1",
-          "message": "Merge branch 'internal_checksum' into bench_test",
-          "timestamp": "2023-05-02T09:33:13Z",
-          "tree_id": "b77185559b40aa97f3a6e01f814bfa5e5cc4f84a",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/d6bb3f178e2858d1c93e4b2e3fbf31348c5ffca1"
-        },
-        "date": 1683020791757,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.068,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.166,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.149,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.95,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 209.9417569,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 92.51762240000001,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1039,6 +985,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "readdir_100000",
             "value": 67.37,
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e52ecb02e1739c94611ec3d4cb64e2f913a97f65",
+          "message": "Increment mountpoint-s3-client version number to 0.2.2 (#270)\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2023-05-31T13:54:08Z",
+          "tree_id": "6d8c4892cdf674c8103d04bc0c3c41b42328872a",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/e52ecb02e1739c94611ec3d4cb64e2f913a97f65"
+        },
+        "date": 1685697245748,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.701,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 1.382,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 7.416,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 67.557,
             "unit": "seconds"
           }
         ]

@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1686737772495,
+  "lastUpdate": 1686737825518,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "d92476dc2cfafc0e4a754fdacb2a207d0f53af2e",
-          "message": "Remove preferred part size\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-05-02T13:39:29Z",
-          "tree_id": "2c9e91a0d9e53db236ee7a3bc72f6fb0c189d258",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/d92476dc2cfafc0e4a754fdacb2a207d0f53af2e"
-        },
-        "date": 1683035820837,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.059,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.157,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.109,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.412,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 53.1349709,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 45.5828721,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -989,6 +935,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "readdir_100000",
             "value": 11.23,
+            "unit": "seconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "sauraank@amazon.co.uk",
+            "name": "Ankit Saurabh",
+            "username": "sauraank"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a016e53712b3738b9c2fc1dd40b6d69bfd012090",
+          "message": "Updating the CRT submodules with the following commits to latest releases- (#288)\n\nc3f95ebf3d6d1608e1656bb08eca05e303cc4fd3\r\n5d912b0dc53d383cdd1dd82df87c60e8ca95a1da\r\n\r\nSigned-off-by: Ankit Saurabh <sauraank@amazon.co.uk>",
+          "timestamp": "2023-06-14T00:14:40-05:00",
+          "tree_id": "b07a846d475fe6b119946a8fcb1b05346a4c3138",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/a016e53712b3738b9c2fc1dd40b6d69bfd012090"
+        },
+        "date": 1686737825107,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.063,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.177,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.129,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.174,
             "unit": "seconds"
           }
         ]

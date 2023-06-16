@@ -23,7 +23,7 @@ env:
 jobs:
   bench:
     name: Benchmark (Throughput)
-    runs-on: [self-hosted, linux, x64, high-performance]
+    runs-on: [self-hosted, linux, x64, 24xlarge]
 
     environment: ${{ inputs.environment }}
 

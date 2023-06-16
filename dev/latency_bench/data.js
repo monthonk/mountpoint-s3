@@ -1,52 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1686841320293,
+  "lastUpdate": 1686909261406,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "49699333+dependabot[bot]@users.noreply.github.com",
-            "name": "dependabot[bot]",
-            "username": "dependabot[bot]"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "843c9630081e3d8c82c595f31431155763094cd9",
-          "message": "Bump xml-rs from 0.8.4 to 0.8.14 (#279)\n\nBumps [xml-rs](https://github.com/kornelski/xml-rs) from 0.8.4 to 0.8.14.\r\n- [Changelog](https://github.com/kornelski/xml-rs/blob/main/Changelog.md)\r\n- [Commits](https://github.com/kornelski/xml-rs/compare/0.8.4...0.8.14)\r\n\r\n---\r\nupdated-dependencies:\r\n- dependency-name: xml-rs\r\n  dependency-type: indirect\r\n...\r\n\r\nSigned-off-by: dependabot[bot] <support@github.com>\r\nCo-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
-          "timestamp": "2023-06-06T05:32:47Z",
-          "tree_id": "8ebb6116e56d3606900ecd10b61e81506277f8e7",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/843c9630081e3d8c82c595f31431155763094cd9"
-        },
-        "date": 1686050042530,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.756,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 1.398,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 7.266,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 67.064,
-            "unit": "seconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1009,6 +965,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 50.777002100000004,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "b88193e82f2e6d74049ebe3356f744f1b1f8a966",
+          "message": "bs=2m\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2023-06-16T09:43:03Z",
+          "tree_id": "d667bd34bceb2c41e87cf33aee7fda281aa3fbb5",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/b88193e82f2e6d74049ebe3356f744f1b1f8a966"
+        },
+        "date": 1686909260952,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.082,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.216,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.138,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.175,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 68.8804099,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 49.0693045,
             "unit": "milliseconds"
           }
         ]

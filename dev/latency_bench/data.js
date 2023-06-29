@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1688044724057,
+  "lastUpdate": 1688057973318,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "5431e8643c5d0f41c5de61d2b43a23436cdf42a8",
-          "message": "Run benchmark with auto network throughput\n\nNow that we have auto network throughput configuration for Mountpoint\nwe can use default configuration in the benchmark. It also makes the\nbenchmark script more flexible when running on other types of instance.\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-06-14T13:23:48Z",
-          "tree_id": "01c90c016013035307c68d94017f5d59d6f1f4f2",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/5431e8643c5d0f41c5de61d2b43a23436cdf42a8"
-        },
-        "date": 1686749781829,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.073,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.177,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.149,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.302,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 70.8912614,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 56.7288493,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 54.4271635,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "00e6f8e8615f7c5cfd43163b88ecc02a52648199",
+          "message": "Build the benchmark with feature flag\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2023-06-29T16:49:14Z",
+          "tree_id": "0bcdf88b28689b854cda60e9bdbcb1254f4941f0",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/00e6f8e8615f7c5cfd43163b88ecc02a52648199"
+        },
+        "date": 1688057972869,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.07,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.185,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.166,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.521,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 80.3842971,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 56.510717299999996,
             "unit": "milliseconds"
           }
         ]

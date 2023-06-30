@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1688138997518,
+  "lastUpdate": 1688139035138,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "09aa5eaa1f308ace9acf0c279969173192bd441f",
-          "message": "Merge commit '93c264173a4a23a54c5bd7d733ba0126ed9412f5' into checksum_bench",
-          "timestamp": "2023-06-16T14:21:28Z",
-          "tree_id": "901b757b5ea5220a3e57c2d9e48ffaa7e2bb8d02",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/09aa5eaa1f308ace9acf0c279969173192bd441f"
-        },
-        "date": 1686926091590,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.066,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.187,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.125,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.095,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 78.73496890000001,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 49.6206842,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 53.6868557,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7bad12eca37ee46f91e9ecccfd1cd2657815f4e",
+          "message": "Turn write support on (#327)\n\n* Turn write support on\r\n\r\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\r\n\r\n* Enable delete feature in workflows\r\n\r\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\r\n\r\n* Only run unlink tests under delete feature\r\n\r\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\r\n\r\n---------\r\n\r\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2023-06-30T16:15:47+01:00",
+          "tree_id": "12376fb46b7bf8d60ee2a5ff3982ea62ee26d80d",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/e7bad12eca37ee46f91e9ecccfd1cd2657815f4e"
+        },
+        "date": 1688139034710,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.061,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.178,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.11,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.107,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 62.5992277,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 81.5826849,
             "unit": "milliseconds"
           }
         ]

@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1688080182240,
+  "lastUpdate": 1688111979985,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "bornholt@amazon.com",
-            "name": "James Bornholt",
-            "username": "jamesbornholt"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "b85e1f6ee0ce64adb453827c3275d2e71cd0769e",
-          "message": "Pick up CRT async streaming fixes (#292)\n\nPicks up https://github.com/awslabs/aws-c-s3/pull/313, which fixes\r\nconcurrency in async streaming\r\n\r\nSigned-off-by: James Bornholt <bornholt@amazon.com>",
-          "timestamp": "2023-06-14T22:51:19+01:00",
-          "tree_id": "6a971958c263a8a4edb7ad4f89cb6693beb8db25",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/b85e1f6ee0ce64adb453827c3275d2e71cd0769e"
-        },
-        "date": 1686826597577,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.062,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.202,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.143,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.798,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 65.4603218,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 46.0123554,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 54.6909015,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "dcc908139717d02a5eef109306e8a709cf9a1c73",
+          "message": "update mountpoint to support the benchmark\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2023-06-30T07:49:05Z",
+          "tree_id": "a8902afb9cb298c69c851713562ac4a5585d1292",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/dcc908139717d02a5eef109306e8a709cf9a1c73"
+        },
+        "date": 1688111979462,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.07,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.168,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.114,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 10.949,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 77.2437693,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 54.3751075,
             "unit": "milliseconds"
           }
         ]

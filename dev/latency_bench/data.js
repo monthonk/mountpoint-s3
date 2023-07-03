@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1688139035138,
+  "lastUpdate": 1688375701710,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "djonesoa@amazon.com",
-            "name": "Daniel Carl Jones",
-            "username": "dannycjones"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "4a3187b9fce63aac19e10ee59096533902da1991",
-          "message": "Fix dependency installation in GitHub workflows (#314)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
-          "timestamp": "2023-06-24T00:03:30-05:00",
-          "tree_id": "0e144bbacb4a2ad79a0b9b6da33ce207c865b0e0",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/4a3187b9fce63aac19e10ee59096533902da1991"
-        },
-        "date": 1687777287933,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.074,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.174,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.17,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.504,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 76.7171655,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 60.5097105,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 81.5826849,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "bornholt@amazon.com",
+            "name": "James Bornholt",
+            "username": "jamesbornholt"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15b062835a3d99c4b17d3742af1cba1b0bafdc7f",
+          "message": "Explicitly prevent mounting over an existing mount (#348)\n\nIt's valid to mount multiple file systems to the same directory, but\r\ndoing so requires the first one to be mounted read-write, which is why\r\nthis wasn't a problem for us until #327. It seems libfuse2's version of\r\nfusermount explicitly checked this(?), but libfuse3 no longer rejects\r\nit.\r\n\r\nIn principle this might be something we'd want to allow, but I think the\r\nless surprising/error-prone customer experience is to refuse to do it,\r\nso let's explicitly forbid it.\r\n\r\nSigned-off-by: James Bornholt <bornholt@amazon.com>",
+          "timestamp": "2023-06-30T18:47:00+01:00",
+          "tree_id": "7218efb2e8616010d994131c38fcda7608cdacd6",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/15b062835a3d99c4b17d3742af1cba1b0bafdc7f"
+        },
+        "date": 1688375701216,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.066,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.168,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.151,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.196,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 91.2185937,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 58.0362899,
             "unit": "milliseconds"
           }
         ]

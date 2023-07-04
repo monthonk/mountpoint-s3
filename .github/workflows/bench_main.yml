@@ -2,7 +2,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "bench_test" ]
 
 permissions:
   id-token: write

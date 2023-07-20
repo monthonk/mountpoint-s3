@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1689864786116,
+  "lastUpdate": 1689864844624,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "c971926cfd9fdeea5a143570ddbff1dfe5d444cc",
-          "message": "run the benchmark\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-07-13T13:05:05Z",
-          "tree_id": "411d99d320e19220bbb0f2171d1a443d3efbf920",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/c971926cfd9fdeea5a143570ddbff1dfe5d444cc"
-        },
-        "date": 1689255595887,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.079,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.191,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.119,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.171,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 81.81221020000001,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 56.200976,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 57.8900906,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ef351495f187968c1560aa04289ecff67f9ef453",
+          "message": "Fix sequential write test with O_RDWR flag (#393)\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2023-07-20T13:39:44Z",
+          "tree_id": "63d7d31461e454c0842eb6f2da239264cdcda5ad",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/ef351495f187968c1560aa04289ecff67f9ef453"
+        },
+        "date": 1689864844140,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.078,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.182,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.156,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.105,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 79.2390494,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 51.0103001,
             "unit": "milliseconds"
           }
         ]

@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1689761649404,
+  "lastUpdate": 1689845132297,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "0b5591392b4a9a5100bc925973d3acd331da1df2",
-          "message": "Add sequential write benchmark\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-07-04T15:00:47Z",
-          "tree_id": "fb7085837d073da4412194c0aa7ff47abe82d7a3",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/0b5591392b4a9a5100bc925973d3acd331da1df2"
-        },
-        "date": 1688483447103,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.069,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.173,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.085,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 10.927,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 59.1279546,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 53.6216814,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 51.6734455,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7786053d72d2fe17e8a8d626bc33604616406b5f",
+          "message": "Add merge_group as workflow trigger for tests and integ tests (#392)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2023-07-19T19:36:32-05:00",
+          "tree_id": "165da5841a00ecab9327d1ed62ac1f0c95bcf966",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/7786053d72d2fe17e8a8d626bc33604616406b5f"
+        },
+        "date": 1689845131758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.074,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.183,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.125,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.163,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 75.55621559999999,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 54.8092112,
             "unit": "milliseconds"
           }
         ]

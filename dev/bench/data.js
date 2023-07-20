@@ -4,120 +4,6 @@ window.BENCHMARK_DATA = {
       {
         "commit": {
           "author": {
-            "email": "bornholt@amazon.com",
-            "name": "James Bornholt",
-            "username": "jamesbornholt"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "6cb1a3d71b74f9b56a8a7153b7a84109442f4005",
-          "message": "Capture panics and pipe them to `tracing` (#357)\n\nWe want to make sure panics are captured in logs so we can debug them.\r\nThis change adds a new panic hook that pulls out the payload, location,\r\nand backtrace of a panic and emits them at error level through\r\n`tracing`. The `main.rs` file is getting a bit out of hand so I tried to\r\nleave it a little better than I found it by moving the logging stuff\r\ninto a submodule.\r\n\r\nSigned-off-by: James Bornholt <bornholt@amazon.com>",
-          "timestamp": "2023-07-07T10:44:40+01:00",
-          "tree_id": "8df352b36562290d6b1b3f4be1fb882ebb53fd65",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/6cb1a3d71b74f9b56a8a7153b7a84109442f4005"
-        },
-        "date": 1688727498586,
-        "tool": "customBiggerIsBetter",
-        "benches": [
-          {
-            "name": "random_read_four_threads_direct_io",
-            "value": 11.791015625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_four_threads_direct_io_small_file",
-            "value": 50.701171875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_four_threads",
-            "value": 7.89453125,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_four_threads_small_file",
-            "value": 43.62890625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_direct_io",
-            "value": 2.8466796875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_direct_io_small_file",
-            "value": 5.93359375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read",
-            "value": 1.4580078125,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_small_file",
-            "value": 5.84375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads_direct_io",
-            "value": 2783.89453125,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads_direct_io_small_file",
-            "value": 278.1123046875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads",
-            "value": 7.1982421875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads_small_file",
-            "value": 7.3291015625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_direct_io",
-            "value": 2210.91796875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_direct_io_small_file",
-            "value": 37.80078125,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read",
-            "value": 401.490234375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_small_file",
-            "value": 43.537109375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_write",
-            "value": 1144.41,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_write_direct_io",
-            "value": 1811.98,
-            "unit": "MiB/s"
-          }
-        ]
-      },
-      {
-        "commit": {
-          "author": {
             "email": "monthonk@amazon.com",
             "name": "Monthon Klongklaew",
             "username": "monthonk"
@@ -2280,9 +2166,123 @@ window.BENCHMARK_DATA = {
             "unit": "MiB/s"
           }
         ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ef351495f187968c1560aa04289ecff67f9ef453",
+          "message": "Fix sequential write test with O_RDWR flag (#393)\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2023-07-20T13:39:44Z",
+          "tree_id": "63d7d31461e454c0842eb6f2da239264cdcda5ad",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/ef351495f187968c1560aa04289ecff67f9ef453"
+        },
+        "date": 1689865565560,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "random_read_four_threads_direct_io",
+            "value": 10.54296875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads_direct_io_small_file",
+            "value": 46.23828125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads",
+            "value": 7.310546875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads_small_file",
+            "value": 46.6650390625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_direct_io",
+            "value": 2.5859375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_direct_io_small_file",
+            "value": 5.83203125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read",
+            "value": 1.4033203125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_small_file",
+            "value": 5.7001953125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_direct_io",
+            "value": 2757.953125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_direct_io_small_file",
+            "value": 233.3291015625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads",
+            "value": 7.458984375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_small_file",
+            "value": 8.40625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_direct_io",
+            "value": 1753.8828125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_direct_io_small_file",
+            "value": 38.01953125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read",
+            "value": 241.1181640625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_small_file",
+            "value": 37.0068359375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_write",
+            "value": 1049.04,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_write_direct_io",
+            "value": 1621.25,
+            "unit": "MiB/s"
+          }
+        ]
       }
     ]
   },
-  "lastUpdate": 1689865524330,
+  "lastUpdate": 1689865566093,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3"
 }

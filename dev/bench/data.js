@@ -14,40 +14,6 @@ window.BENCHMARK_DATA = {
             "username": "monthonk"
           },
           "distinct": true,
-          "id": "c080e5eb816407f6af86b3e6b236a1c92df7af9c",
-          "message": "Add sequential write benchmark\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-07-04T14:54:11Z",
-          "tree_id": "70f8d8693fa85d7954617c332f8f19ffac5409b5",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/c080e5eb816407f6af86b3e6b236a1c92df7af9c"
-        },
-        "date": 1688482859715,
-        "tool": "customBiggerIsBetter",
-        "benches": [
-          {
-            "name": "sequential_write",
-            "value": 1144.41,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_write_direct_io",
-            "value": 1811.98,
-            "unit": "MiB/s"
-          }
-        ]
-      },
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
           "id": "0b5591392b4a9a5100bc925973d3acd331da1df2",
           "message": "Add sequential write benchmark\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
           "timestamp": "2023-07-04T15:00:47Z",
@@ -2200,9 +2166,123 @@ window.BENCHMARK_DATA = {
             "unit": "MiB/s"
           }
         ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7786053d72d2fe17e8a8d626bc33604616406b5f",
+          "message": "Add merge_group as workflow trigger for tests and integ tests (#392)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2023-07-19T19:36:32-05:00",
+          "tree_id": "165da5841a00ecab9327d1ed62ac1f0c95bcf966",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/7786053d72d2fe17e8a8d626bc33604616406b5f"
+        },
+        "date": 1689845872980,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "random_read_four_threads_direct_io",
+            "value": 8.64453125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads_direct_io_small_file",
+            "value": 44.0537109375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads",
+            "value": 4.68359375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads_small_file",
+            "value": 47.9521484375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_direct_io",
+            "value": 2.087890625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_direct_io_small_file",
+            "value": 5.9736328125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read",
+            "value": 0.861328125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_small_file",
+            "value": 5.9013671875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_direct_io",
+            "value": 2629.59375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_direct_io_small_file",
+            "value": 258.376953125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads",
+            "value": 6.2646484375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_small_file",
+            "value": 8.671875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_direct_io",
+            "value": 1720.1591796875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_direct_io_small_file",
+            "value": 38.865234375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read",
+            "value": 257.357421875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_small_file",
+            "value": 40.265625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_write",
+            "value": 1049.04,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_write_direct_io",
+            "value": 1716.61,
+            "unit": "MiB/s"
+          }
+        ]
       }
     ]
   },
-  "lastUpdate": 1689762397848,
+  "lastUpdate": 1689845873442,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3"
 }

@@ -494,3 +494,49 @@ fn write_file(path: impl AsRef<Path>) -> std::io::Result<()> {
 fn write_with_invalid_storage_class_test_s3(storage_class: &str) {
     write_with_invalid_storage_class_test(crate::fuse_tests::s3_session::new, storage_class);
 }
+
+
+fn flush_test<F>(creator_fn: F, prefix: &str, append: bool)
+where
+    F: FnOnce(&str, TestSessionConfig) -> (TempDir, BackgroundSession, TestClientBox),
+{
+    const OBJECT_SIZE: usize = 50 * 1024;
+    const WRITE_SIZE: usize = 1024;
+
+    let (mount_point, _session, _test_client) = creator_fn(prefix, Default::default());
+
+    let path = mount_point.path().join("new.txt");
+
+    let mut f = open_for_write(&path, append).unwrap();
+
+    let mut rng = ChaCha20Rng::seed_from_u64(0x12345678 + OBJECT_SIZE as u64);
+    let mut body = vec![0u8; OBJECT_SIZE];
+    rng.fill(&mut body[..]);
+
+    for part in body.chunks(WRITE_SIZE) {
+        f.write_all(part).unwrap();
+    }
+
+    //f.sync_all().unwrap();
+    drop(f);
+
+    // Now it's closed, we can stat or read it
+    let m = metadata(&path).unwrap();
+    assert_eq!(m.len(), body.len() as u64);
+
+    let buf = read(&path).unwrap();
+    assert_eq!(&buf[..], &body[..]);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test_case(true; "append")]
+#[test_case(false; "no append")]
+fn flush_test_s3(append: bool) {
+    flush_test(crate::fuse_tests::s3_session::new, "sequential_write_test", append);
+}
+
+#[test_case(true; "append")]
+#[test_case(false; "no append")]
+fn flush_test_mock(append: bool) {
+    flush_test(crate::fuse_tests::mock_session::new, "sequential_write_test", append);
+}

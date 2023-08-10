@@ -215,6 +215,14 @@ where
     }
 
     #[instrument(level="warn", skip_all, fields(req=_req.unique(), ino=ino, fh=fh))]
+    fn flush(&self, _req: &Request<'_>, ino: u64, fh: u64, lock_owner: u64, reply: ReplyEmpty) {
+        match block_on(self.fs.flush(ino, fh, lock_owner).in_current_span()) {
+            Ok(()) => reply.ok(),
+            Err(e) => fuse_error!("flush", reply, e),
+        }
+    }
+
+    #[instrument(level="warn", skip_all, fields(req=_req.unique(), ino=ino, fh=fh))]
     fn release(
         &self,
         _req: &Request<'_>,

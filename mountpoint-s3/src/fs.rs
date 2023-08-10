@@ -142,25 +142,23 @@ impl<Client: ObjectClient> UploadState<Client> {
         }
     }
 
-    async fn complete(&mut self, key: &str) -> Result<(), Error> {
-        // Check that the upload is still in progress.
-        _ = self.get_upload_in_progress(key)?;
+    async fn complete_if_in_progress(&mut self, key: &str) -> Result<(), Error> {
+        match self {
+            Self::InProgress { .. } => {}
+            Self::Completed => return Ok(()),
+            Self::Failed(e) => return Err(err!(*e, "upload already aborted for key {:?}", key)),
+        };
+
         let (upload, handle) = match std::mem::replace(self, Self::Completed) {
             Self::InProgress { request, handle } => (request, handle),
-            Self::Failed(_) | Self::Completed => unreachable!("checked by get_upload_in_progress"),
+            Self::Failed(_) | Self::Completed => unreachable!("checked above"),
         };
+
         let result = Self::complete_upload(upload, key, handle).await;
         if let Err(e) = &result {
             *self = Self::Failed(e.to_errno());
         }
         result
-    }
-
-    async fn complete_if_in_progress(self, key: &str) -> Result<(), Error> {
-        match self {
-            Self::InProgress { request, handle } => Self::complete_upload(request, key, handle).await,
-            Self::Failed(_) | Self::Completed => Ok(()),
-        }
     }
 
     async fn complete_upload(upload: UploadRequest<Client>, key: &str, handle: WriteHandle) -> Result<(), Error> {
@@ -778,7 +776,27 @@ where
             FileHandleType::Write(request) => request.lock().await,
             FileHandleType::Read { .. } => return Ok(()),
         };
-        match request.complete(&file_handle.full_key).await {
+        match request.complete_if_in_progress(&file_handle.full_key).await {
+            // According to the `fsync` man page we should return ENOSPC instead of EFBIG if it's a
+            // space-related failure.
+            Err(e) if e.to_errno() == libc::EFBIG => Err(err!(libc::ENOSPC, source:e, "object too big")),
+            ret => ret,
+        }
+    }
+
+    pub async fn flush(&self, _ino: InodeNo, fh: u64, _lock_owner: u64) -> Result<(), Error> {
+        let file_handle = {
+            let file_handles = self.file_handles.read().await;
+            match file_handles.get(&fh) {
+                Some(handle) => handle.clone(),
+                None => return Err(err!(libc::EBADF, "invalid file handle")),
+            }
+        };
+        let mut request = match &file_handle.typ {
+            FileHandleType::Write(request) => request.lock().await,
+            FileHandleType::Read { .. } => return Ok(()),
+        };
+        match request.complete_if_in_progress(&file_handle.full_key).await {
             // According to the `fsync` man page we should return ENOSPC instead of EFBIG if it's a
             // space-related failure.
             Err(e) if e.to_errno() == libc::EFBIG => Err(err!(libc::ENOSPC, source:e, "object too big")),

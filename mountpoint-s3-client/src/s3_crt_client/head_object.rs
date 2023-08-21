@@ -55,11 +55,16 @@ impl HeadObjectResult {
             .map_err(|e| ParseError::Int(e, "ContentLength".into()))?;
         let etag = get_field(headers, "Etag")?;
         let storage_class = get_optional_field(headers, "x-amz-storage-class")?;
+        let restored = match get_optional_field(headers, "x-amz-restore")? {
+            Some(value) => value.contains("ongoing-request=\"false\""),
+            None => false,
+        };
         let object = ObjectInfo {
             key,
             size,
             last_modified,
             storage_class,
+            restored,
             etag,
         };
         Ok(HeadObjectResult { bucket, object })

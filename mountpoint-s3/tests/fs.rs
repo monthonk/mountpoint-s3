@@ -889,7 +889,7 @@ async fn test_readdir_vs_readdirplus() {
 
 #[tokio::test]
 async fn test_flexible_retrieval_objects() {
-    const NAMES: &[&str] = &["GLACIER", "GLACIER_IR", "DEEP_ARCHIVE"];
+    const NAMES: &[&str] = &["GLACIER", "GLACIER_IR", "DEEP_ARCHIVE", "GLACIER_RESTORED", "DEEP_ARCHIVE_RESTORED"];
 
     let (client, fs) = make_test_filesystem(
         "test_flexible_retrieval_objects",
@@ -899,7 +899,8 @@ async fn test_flexible_retrieval_objects() {
 
     for name in NAMES {
         let mut object = MockObject::from(b"hello world");
-        object.set_storage_class(Some(name.to_string()));
+        object.set_storage_class(Some(name.to_string().replace("_RESTORED", "")));
+        object.set_restored(name.contains("_RESTORED"));
         client.add_object(name, object);
     }
 
@@ -936,7 +937,8 @@ async fn test_flexible_retrieval_objects() {
 
         let file_name = format!("{name}2");
         let mut object = MockObject::from(b"hello world");
-        object.set_storage_class(Some(name.to_string()));
+        object.set_storage_class(Some(name.to_string().replace("_RESTORED", "")));
+        object.set_restored(name.contains("_RESTORED"));
         client.add_object(&file_name, object);
 
         let lookup = fs.lookup(FUSE_ROOT_INODE, file_name.as_ref()).await.unwrap();

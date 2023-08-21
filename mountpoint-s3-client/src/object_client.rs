@@ -336,6 +336,11 @@ pub struct ObjectInfo {
     /// https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html#API_HeadObject_Examples
     pub storage_class: Option<String>,
 
+    /// Objects with GLACIER or DEEP_ARCHIVE storage classes are only acessable after restoration
+    /// This field is is set to true when \1 object has either GLACIER or DEEP_ARCHIVE storage class \2 restoration is fully
+    /// completed (i.e. head_object response contains "x-amz-restore" header with ongoing-request="false").
+    pub restored: bool,
+
     /// Entity tag of this object.
     pub etag: String,
 }

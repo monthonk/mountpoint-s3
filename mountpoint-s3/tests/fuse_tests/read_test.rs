@@ -75,22 +75,43 @@ fn basic_read_test_mock_prefix() {
     basic_read_test(crate::fuse_tests::mock_session::new, "basic_read_test");
 }
 
-fn read_flexible_retrieval_test<F>(creator_fn: F, prefix: &str)
+#[derive(PartialEq)]
+enum RestorationOptions {
+    None,
+    RestoreAndWait,
+    RestoreInProgress,
+}
+
+fn read_flexible_retrieval_test<F>(creator_fn: F, prefix: &str, files: &[&str], restore: RestorationOptions)
 where
     F: FnOnce(&str, TestSessionConfig) -> (TempDir, BackgroundSession, TestClientBox),
 {
-    const FILES: &[&str] = &["STANDARD", "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"];
-
     let (mount_point, _session, mut test_client) = creator_fn(prefix, Default::default());
 
-    for file in FILES {
+    for file in files {
         let mut put_params = PutObjectParams::default();
         if *file != "STANDARD" {
             put_params.storage_class = Some(file.to_string());
         }
+        let key = format!("{file}.txt");
         test_client
-            .put_object_params(&format!("{file}.txt"), b"hello world", put_params)
+            .put_object_params(&key, b"hello world", put_params)
             .unwrap();
+        match restore {
+            RestorationOptions::None => (),
+            RestorationOptions::RestoreAndWait => {
+                test_client.restore_object(&key, true).unwrap();
+                let mut i = 0;
+                let timeout_s = 300;
+                while i < timeout_s && !test_client.is_object_restored(&key).expect("failed to check restoration status") {
+                    println!("restoration is in progress, timeout in: {}s", timeout_s - i);
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    i += 1;
+                }
+                assert_ne!(i, timeout_s, "timeouted while waiting for object become restored");
+            },
+            RestorationOptions::RestoreInProgress => test_client.restore_object(&key, false).unwrap(),
+        }
     }
 
     let read_dir_iter = read_dir(mount_point.path()).unwrap();
@@ -99,7 +120,7 @@ where
         let file_name = file.file_name().to_string_lossy().into_owned();
 
         let metadata = file.metadata().unwrap();
-        if file_name == "GLACIER.txt" || file_name == "DEEP_ARCHIVE.txt" {
+        if (file_name == "GLACIER.txt" || file_name == "DEEP_ARCHIVE.txt") && restore != RestorationOptions::RestoreAndWait {
             assert_eq!(metadata.permissions().mode() as libc::mode_t & !libc::S_IFMT, 0o000);
             let err = File::open(file.path()).expect_err("read of flexible retrieval object should fail");
             assert_eq!(err.raw_os_error(), Some(libc::EACCES));
@@ -115,11 +136,35 @@ where
 #[cfg(feature = "s3_tests")]
 #[test]
 fn read_flexible_retrieval_test_s3() {
-    read_flexible_retrieval_test(crate::fuse_tests::s3_session::new, "read_flexible_retrieval_test");
+    const FILES: &[&str] = &["STANDARD", "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"];
+    read_flexible_retrieval_test(crate::fuse_tests::s3_session::new, "read_flexible_retrieval_test", FILES, RestorationOptions::None);
 }
 
 #[test_case(""; "no prefix")]
 #[test_case("read_flexible_retrieval_test"; "prefix")]
 fn read_flexible_retrieval_test_mock(prefix: &str) {
-    read_flexible_retrieval_test(crate::fuse_tests::mock_session::new, prefix);
+    const FILES: &[&str] = &["STANDARD", "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"];
+    read_flexible_retrieval_test(crate::fuse_tests::mock_session::new, prefix, FILES, RestorationOptions::None);
+}
+
+#[test_case(""; "no prefix")]
+#[test_case("read_flexible_retrieval_test"; "prefix")]
+fn read_flexible_retrieval_restored_test_mock(prefix: &str) {
+    const FILES: &[&str] = &["GLACIER", "DEEP_ARCHIVE"];
+    read_flexible_retrieval_test(crate::fuse_tests::mock_session::new, prefix, FILES, RestorationOptions::RestoreAndWait);
+}
+
+// This test relies on s3's expedited object restoration, it takes 1-5 minutes to complete
+#[cfg(feature = "s3_tests")]
+#[test]
+fn read_flexible_retrieval_restored_test_s3() {
+    const RESTORED_FILES: &[&str] = &["GLACIER"];
+    read_flexible_retrieval_test(crate::fuse_tests::s3_session::new, "read_flexible_retrieval_restored_test_s3", RESTORED_FILES, RestorationOptions::RestoreAndWait);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test]
+fn read_flexible_retrieval_restoring_test_s3() {
+    const RESTORING_FILES: &[&str] = &["GLACIER", "DEEP_ARCHIVE"];
+    read_flexible_retrieval_test(crate::fuse_tests::s3_session::new, "read_flexible_retrieval_restoring_test_s3", RESTORING_FILES, RestorationOptions::RestoreInProgress);
 }

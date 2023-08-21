@@ -331,7 +331,7 @@ impl Superblock {
         // Local inode stats never expire, because they can't be looked up remotely
         let stat = match kind {
             // Objects don't have an ETag until they are uploaded to S3
-            InodeKind::File => InodeStat::for_file(0, OffsetDateTime::now_utc(), None, None, NEVER_EXPIRE_TTL),
+            InodeKind::File => InodeStat::for_file(0, OffsetDateTime::now_utc(), None, None,  false, NEVER_EXPIRE_TTL),
             InodeKind::Directory => InodeStat::for_directory(self.inner.mount_time, NEVER_EXPIRE_TTL),
         };
 
@@ -350,7 +350,7 @@ impl Superblock {
     }
 
     /// Remove local-only empty directory, i.e., the ones created by mkdir.
-    /// It does not affect empty directories represented remotely with directory markers.  
+    /// It does not affect empty directories represented remotely with directory markers.
     pub async fn rmdir<OC: ObjectClient>(
         &self,
         client: &OC,
@@ -597,7 +597,7 @@ impl SuperblockInner {
                 result = file_lookup => {
                     match result {
                         Ok(HeadObjectResult { object, .. }) => {
-                            let stat = InodeStat::for_file(object.size as usize, object.last_modified, Some(object.etag.clone()), object.storage_class, self.cache_config.file_ttl);
+                            let stat = InodeStat::for_file(object.size as usize, object.last_modified, Some(object.etag.clone()), object.storage_class, object.restored, self.cache_config.file_ttl);
                             file_state = Some(stat);
                         }
                         // If the object is not found, might be a directory, so keep going
@@ -1255,6 +1255,8 @@ pub struct InodeStat {
     pub etag: Option<String>,
     /// Storage class for the file (object), if known
     storage_class: Option<StorageClass>,
+    /// For objects with GLACIER or DEEP_ARCHIVE storage class shows if the object is restored (=> readable)
+    pub restored: bool,
 }
 
 /// Inode write status (local vs remote)
@@ -1279,6 +1281,7 @@ impl InodeStat {
         datetime: OffsetDateTime,
         etag: Option<String>,
         storage_class: Option<String>,
+        restored: bool,
         validity: Duration,
     ) -> InodeStat {
         let expiry = Instant::now()
@@ -1293,6 +1296,7 @@ impl InodeStat {
             mtime: datetime,
             etag,
             storage_class,
+            restored,
         }
     }
 
@@ -1309,6 +1313,7 @@ impl InodeStat {
             mtime: datetime,
             etag: None,
             storage_class: None,
+            restored: false,
         }
     }
 
@@ -1514,7 +1519,7 @@ mod tests {
             InodeKind::File,
             InodeState {
                 write_status: WriteStatus::Remote,
-                stat: InodeStat::for_file(0, OffsetDateTime::now_utc(), None, None, Default::default()),
+                stat: InodeStat::for_file(0, OffsetDateTime::now_utc(), None, None, false, Default::default()),
                 kind_data: InodeKindData::File {},
                 lookup_count: 5,
             },
@@ -2024,6 +2029,7 @@ mod tests {
                         OffsetDateTime::now_utc(),
                         Some(ETag::for_tests().as_str().to_owned()),
                         None,
+                        false,
                         NEVER_EXPIRE_TTL,
                     ),
                     write_status: WriteStatus::Remote,
@@ -2325,7 +2331,7 @@ mod tests {
                 checksum,
                 sync: RwLock::new(InodeState {
                     write_status: WriteStatus::LocalOpen,
-                    stat: InodeStat::for_file(0, OffsetDateTime::UNIX_EPOCH, None, None, Default::default()),
+                    stat: InodeStat::for_file(0, OffsetDateTime::UNIX_EPOCH, None, None, false, Default::default()),
                     kind_data: InodeKindData::File {},
                     lookup_count: 5,
                 }),
@@ -2348,7 +2354,7 @@ mod tests {
     #[test]
     fn test_inodestat_constructors() {
         let ts = OffsetDateTime::UNIX_EPOCH + Duration::days(90);
-        let file_inodestat = InodeStat::for_file(128, ts, None, None, Default::default());
+        let file_inodestat = InodeStat::for_file(128, ts, None, None, false, Default::default());
         assert_eq!(file_inodestat.size, 128);
         assert_eq!(file_inodestat.atime, ts);
         assert_eq!(file_inodestat.ctime, ts);

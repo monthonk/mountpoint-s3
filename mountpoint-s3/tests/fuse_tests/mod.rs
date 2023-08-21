@@ -43,6 +43,10 @@ pub trait TestClient {
     fn is_upload_in_progress(&self, key: &str) -> Result<bool, Box<dyn std::error::Error>>;
 
     fn get_object_storage_class(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error>>;
+
+    fn restore_object(&mut self, key: &str, expedited: bool) -> Result<(), Box<dyn std::error::Error>>;
+
+    fn is_object_restored(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>>;
 }
 
 pub type TestClientBox = Box<dyn TestClient>;
@@ -165,6 +169,17 @@ mod mock_session {
             self.client
                 .get_object_storage_class(&full_key)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }
+
+        fn restore_object(&mut self, key: &str, expedited: bool) -> Result<(), Box<dyn std::error::Error>> {
+            let full_key = format!("{}{}", self.prefix, key);
+            self.client
+                .restore_object(&full_key)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }
+
+        fn is_object_restored(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+            Ok(true)
         }
     }
 }
@@ -342,6 +357,42 @@ mod s3_session {
                     .send(),
             )
             .map(|output| output.storage_class().map(|s| s.as_str().to_string()))
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }
+
+        // Schudule restoration of an object, do not wait until completion. Expidited restoration completes within 1-5 min for GLACIER and is not available for DEEP_ARCHIVE.
+        // https://docs.aws.amazon.com/AmazonS3/latest/userguide/restoring-objects-retrieval-options.html?icmpid=docs_amazons3_console#restoring-objects-upgrade-tier
+        fn restore_object(&mut self, key: &str, expedited: bool) -> Result<(), Box<dyn std::error::Error>> {
+            let full_key = format!("{}{}", self.prefix, key);
+            let tier = if expedited { aws_sdk_s3::model::Tier::Expedited } else { aws_sdk_s3::model::Tier::Bulk };
+            tokio_block_on(
+                self.sdk_client
+                    .restore_object()
+                    .bucket(&self.bucket)
+                    .key(full_key)
+                    .set_restore_request(Some(aws_sdk_s3::model::RestoreRequest::builder()
+                        .set_days(Some(1))
+                        .set_glacier_job_parameters(Some(aws_sdk_s3::model::GlacierJobParameters::builder()
+                            .set_tier(Some(tier))
+                            .build()
+                        ))
+                        .build()))
+                    .send(),
+            )
+            .map(|_| ())
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        }
+
+        fn is_object_restored(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+            let full_key = format!("{}{}", self.prefix, key);
+            tokio_block_on(
+                self.sdk_client
+                    .head_object()
+                    .bucket(&self.bucket)
+                    .key(full_key)
+                    .send(),
+            )
+            .map(|output| output.restore().unwrap().contains("ongoing-request=\"false\""))
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
         }
     }

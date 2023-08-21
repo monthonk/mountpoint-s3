@@ -2,6 +2,7 @@ use std::ops::Deref;
 use std::os::unix::prelude::OsStrExt;
 use std::str::FromStr;
 
+use mountpoint_s3_crt::http::request_response::Header;
 use mountpoint_s3_crt::s3::client::{MetaRequestResult, MetaRequestType};
 use thiserror::Error;
 use time::format_description::well_known::Rfc3339;
@@ -115,6 +116,13 @@ impl ObjectInfo {
             .map_err(|e| ParseError::OffsetDateTime(e, "LastModified".to_string()))?;
 
         let storage_class = get_field(element, "StorageClass").ok();
+        let restored = match element.get_child("RestoreStatus") {
+            Some(restore_status) => {
+                let restore_in_progress = get_field(restore_status, "IsRestoreInProgress")?;
+                !bool::from_str(&restore_in_progress).map_err(|e| ParseError::Bool(e, "IsRestoreInProgress".to_string()))?
+            },
+            None => false,
+        };
 
         let etag = get_field(element, "ETag")?;
 
@@ -123,6 +131,7 @@ impl ObjectInfo {
             size,
             last_modified,
             storage_class,
+            restored,
             etag,
         })
     }
@@ -143,7 +152,9 @@ impl S3CrtClient {
                 .inner
                 .new_request_template("GET", bucket)
                 .map_err(S3RequestError::construction_failure)?;
-
+            message
+                .add_header(&Header::new("x-amz-optional-object-attributes", "RestoreStatus"))
+                .map_err(S3RequestError::construction_failure)?;
             let max_keys = format!("{max_keys}");
             let mut query = vec![
                 ("list-type", "2"),

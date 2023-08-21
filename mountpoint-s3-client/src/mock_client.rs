@@ -108,6 +108,20 @@ impl MockClient {
             Err(MockClientError("object not found".into()))
         }
     }
+
+    /// Returns error if object does not exist
+    pub fn restore_object(&self, key: &str) -> Result<(), MockClientError> {
+        let mut cloned: MockObject;
+        if let Some(mock_object) = self.objects.write().unwrap().get(key) {
+            cloned = (**mock_object).clone();
+            cloned.restored = true;
+        } else {
+            return Err(MockClientError("object not found".into()));
+        }
+        self.remove_object(key);
+        self.add_object(key, cloned);
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -115,6 +129,7 @@ pub struct MockObject {
     generator: Arc<dyn Fn(u64, usize) -> Box<[u8]> + Send + Sync>,
     size: usize,
     storage_class: Option<String>,
+    restored: bool,
     last_modified: OffsetDateTime,
     etag: ETag,
 }
@@ -131,6 +146,7 @@ impl MockObject {
             size: bytes.len(),
             generator: Arc::new(move |offset, size| bytes[offset as usize..offset as usize + size].into()),
             storage_class: None,
+            restored: false,
             last_modified: OffsetDateTime::now_utc(),
             etag,
         }
@@ -141,6 +157,7 @@ impl MockObject {
             generator: Arc::new(move |_offset, size| vec![v; size].into_boxed_slice()),
             size,
             storage_class: None,
+            restored: false,
             last_modified: OffsetDateTime::now_utc(),
             etag,
         }
@@ -161,6 +178,7 @@ impl MockObject {
             }),
             size,
             storage_class: None,
+            restored: false,
             last_modified: OffsetDateTime::now_utc(),
             etag,
         }
@@ -172,6 +190,10 @@ impl MockObject {
 
     pub fn set_storage_class(&mut self, storage_class: Option<String>) {
         self.storage_class = storage_class;
+    }
+
+    pub fn set_restored(&mut self, restored: bool) {
+        self.restored = restored;
     }
 
     pub fn len(&self) -> usize {
@@ -200,6 +222,7 @@ impl std::fmt::Debug for MockObject {
             .field("storage_class", &self.storage_class)
             .field("last_modified", &self.last_modified)
             .field("etag", &self.etag)
+            .field("restored", &self.restored)
             .finish()
     }
 }
@@ -347,6 +370,7 @@ impl ObjectClient for MockClient {
                     last_modified: object.last_modified,
                     etag: object.etag.as_str().to_string(),
                     storage_class: object.storage_class.clone(),
+                    restored: object.restored,
                 },
             })
         } else {
@@ -442,6 +466,7 @@ impl ObjectClient for MockClient {
                     last_modified: object.last_modified,
                     etag: object.etag.as_str().to_string(),
                     storage_class: object.storage_class.clone(),
+                    restored: object.restored,
                 });
             }
         }

@@ -119,8 +119,9 @@ impl ObjectInfo {
         let restored = match element.get_child("RestoreStatus") {
             Some(restore_status) => {
                 let restore_in_progress = get_field(restore_status, "IsRestoreInProgress")?;
-                !bool::from_str(&restore_in_progress).map_err(|e| ParseError::Bool(e, "IsRestoreInProgress".to_string()))?
-            },
+                !bool::from_str(&restore_in_progress)
+                    .map_err(|e| ParseError::Bool(e, "IsRestoreInProgress".to_string()))?
+            }
             None => false,
         };
 

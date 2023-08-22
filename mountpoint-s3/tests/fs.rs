@@ -889,7 +889,13 @@ async fn test_readdir_vs_readdirplus() {
 
 #[tokio::test]
 async fn test_flexible_retrieval_objects() {
-    const NAMES: &[&str] = &["GLACIER", "GLACIER_IR", "DEEP_ARCHIVE", "GLACIER_RESTORED", "DEEP_ARCHIVE_RESTORED"];
+    const NAMES: &[&str] = &[
+        "GLACIER",
+        "GLACIER_IR",
+        "DEEP_ARCHIVE",
+        "GLACIER_RESTORED",
+        "DEEP_ARCHIVE_RESTORED",
+    ];
 
     let (client, fs) = make_test_filesystem(
         "test_flexible_retrieval_objects",

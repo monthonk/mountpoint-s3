@@ -130,19 +130,24 @@ async fn test_head_object_restored() {
 
     assert_eq!(result.bucket, bucket);
     assert_eq!(result.object.key, key);
-    assert!(!result.object.restored, "object should become restored only after restoration");
+    assert!(
+        !result.object.restored,
+        "object should become restored only after restoration"
+    );
 
     sdk_client
         .restore_object()
         .bucket(&bucket)
         .key(&key)
-        .restore_request(aws_sdk_s3::model::RestoreRequest::builder()
-            .set_days(Some(1))
-            .set_glacier_job_parameters(Some(aws_sdk_s3::model::GlacierJobParameters::builder()
-                .set_tier(Some(aws_sdk_s3::model::Tier::Expedited))
-                .build()
-            ))
-            .build()
+        .restore_request(
+            aws_sdk_s3::model::RestoreRequest::builder()
+                .set_days(Some(1))
+                .set_glacier_job_parameters(Some(
+                    aws_sdk_s3::model::GlacierJobParameters::builder()
+                        .set_tier(Some(aws_sdk_s3::model::Tier::Expedited))
+                        .build(),
+                ))
+                .build(),
         )
         .send()
         .await
@@ -150,7 +155,14 @@ async fn test_head_object_restored() {
 
     let timeout_s = 300;
     let mut i = 0;
-    while i < timeout_s && !client.head_object(&bucket, &key).await.expect("head_object failed").object.restored {
+    while i < timeout_s
+        && !client
+            .head_object(&bucket, &key)
+            .await
+            .expect("head_object failed")
+            .object
+            .restored
+    {
         println!("restoration is in progress, timeout in: {}s", timeout_s - i);
         std::thread::sleep(std::time::Duration::from_secs(1));
         i += 1;

@@ -364,19 +364,26 @@ mod s3_session {
         // https://docs.aws.amazon.com/AmazonS3/latest/userguide/restoring-objects-retrieval-options.html?icmpid=docs_amazons3_console#restoring-objects-upgrade-tier
         fn restore_object(&mut self, key: &str, expedited: bool) -> Result<(), Box<dyn std::error::Error>> {
             let full_key = format!("{}{}", self.prefix, key);
-            let tier = if expedited { aws_sdk_s3::model::Tier::Expedited } else { aws_sdk_s3::model::Tier::Bulk };
+            let tier = if expedited {
+                aws_sdk_s3::model::Tier::Expedited
+            } else {
+                aws_sdk_s3::model::Tier::Bulk
+            };
             tokio_block_on(
                 self.sdk_client
                     .restore_object()
                     .bucket(&self.bucket)
                     .key(full_key)
-                    .set_restore_request(Some(aws_sdk_s3::model::RestoreRequest::builder()
-                        .set_days(Some(1))
-                        .set_glacier_job_parameters(Some(aws_sdk_s3::model::GlacierJobParameters::builder()
-                            .set_tier(Some(tier))
-                            .build()
-                        ))
-                        .build()))
+                    .set_restore_request(Some(
+                        aws_sdk_s3::model::RestoreRequest::builder()
+                            .set_days(Some(1))
+                            .set_glacier_job_parameters(Some(
+                                aws_sdk_s3::model::GlacierJobParameters::builder()
+                                    .set_tier(Some(tier))
+                                    .build(),
+                            ))
+                            .build(),
+                    ))
                     .send(),
             )
             .map(|_| ())
@@ -385,15 +392,9 @@ mod s3_session {
 
         fn is_object_restored(&mut self, key: &str) -> Result<bool, Box<dyn std::error::Error>> {
             let full_key = format!("{}{}", self.prefix, key);
-            tokio_block_on(
-                self.sdk_client
-                    .head_object()
-                    .bucket(&self.bucket)
-                    .key(full_key)
-                    .send(),
-            )
-            .map(|output| output.restore().unwrap().contains("ongoing-request=\"false\""))
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+            tokio_block_on(self.sdk_client.head_object().bucket(&self.bucket).key(full_key).send())
+                .map(|output| output.restore().unwrap().contains("ongoing-request=\"false\""))
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
         }
     }
 }

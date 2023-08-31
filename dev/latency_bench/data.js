@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1692868614822,
+  "lastUpdate": 1693477383626,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "bornholt@amazon.com",
-            "name": "James Bornholt",
-            "username": "jamesbornholt"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "33fe81ff551ebd0031c94ca9f8761ed6e1a70c60",
-          "message": "Bump some dependencies to mostly remove `atty` (#403)\n\n* Bump some dependencies to mostly remove `atty`\n\nIt's no longer in our release dependency closure, but still in the test\nclosure through two sources:\n* fuser uses clap v3 in its examples, which still depends on atty\n* fuser uses env-logger v0.9 in its examples, which still depends on\n  atty\n\nSigned-off-by: James Bornholt <bornholt@amazon.com>\n\n* Fix list example\n\nSigned-off-by: James Bornholt <bornholt@amazon.com>\n\n---------\n\nSigned-off-by: James Bornholt <bornholt@amazon.com>",
-          "timestamp": "2023-07-24T17:24:51Z",
-          "tree_id": "3ce625cb4e3cf9507d942c71cf1d6e158613c49e",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/33fe81ff551ebd0031c94ca9f8761ed6e1a70c60"
-        },
-        "date": 1690282963628,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.07,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.192,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.11,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.11,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 67.6211881,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 53.8706046,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 67.2989225,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "vladvolodkin@gmail.com",
+            "name": "Volodkin Vladislav",
+            "username": "vladem"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5626e204259e6a8141d798dbc0837ce3e3e3c3c3",
+          "message": "Allow reading restored GFR/GDA objects (#434) (#467)\n\nSigned-off-by: Vlad Volodkin <vlaad@amazon.com>\nCo-authored-by: Vlad Volodkin <vlaad@amazon.com>",
+          "timestamp": "2023-08-30T22:33:46Z",
+          "tree_id": "b6e1559cd71f934917f8e13028b3f7ddb68ef46a",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/5626e204259e6a8141d798dbc0837ce3e3e3c3c3"
+        },
+        "date": 1693477380965,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.076,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.145,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.258,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 12.526,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 152.6135036,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 69.4844756,
             "unit": "milliseconds"
           }
         ]

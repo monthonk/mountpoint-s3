@@ -16,3 +16,4 @@ jobs:
     uses: ./.github/workflows/integration.yml
     with:
       ref: ${{ github.event.after }}
+    secrets: inherit

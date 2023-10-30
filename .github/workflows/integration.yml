@@ -66,6 +66,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
       with:
+        token: ${{ secrets.GH_PAT }}
         ref: ${{ inputs.ref }}
         submodules: true
         persist-credentials: false

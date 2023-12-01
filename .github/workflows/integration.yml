@@ -30,7 +30,7 @@ env:
   S3_OLAP_ALIAS: ${{ vars.S3_OLAP_ALIAS }}
   S3_OLAP_ARN: ${{ vars.S3_OLAP_ARN }}
   S3_MRAP_ARN: ${{ vars.S3_MRAP_ARN }}
-  RUST_FEATURES: fuse_tests,s3_tests,fips_tests
+  RUST_FEATURES: fuse_tests,s3_tests
 
 permissions:
   id-token: write

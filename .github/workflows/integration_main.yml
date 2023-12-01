@@ -2,7 +2,7 @@ name: Integration tests
 
 on:
   push:
-    branches: [ "no_fips" ]
+    branches: [ "s3express-ci-rn" ]
   merge_group:
     types: [ "checks_requested" ]
 

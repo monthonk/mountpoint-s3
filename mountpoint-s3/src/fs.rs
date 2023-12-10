@@ -58,91 +58,84 @@ where
     inode: Inode,
     full_key: String,
     object_size: u64,
-    typ: FileHandleType<Client, Prefetcher>,
+    state: FileHandleState<Client, Prefetcher>,
+    read_only: bool,
+    write_only: bool,
 }
 
-enum FileHandleType<Client, Prefetcher>
+struct FileHandleState<Client, Prefetcher>
 where
     Client: ObjectClient + Send + Sync + 'static,
     Prefetcher: Prefetch,
 {
-    Read {
-        request: AsyncMutex<Option<Prefetcher::PrefetchResult<Client>>>,
-        etag: ETag,
-    },
-    Write(AsyncMutex<UploadState<Client>>),
+    reader: AsyncMutex<Option<Prefetcher::PrefetchResult<Client>>>,
+    writer: AsyncMutex<UploadState<Client>>,
+    etag: Option<ETag>,
 }
 
-impl<Client, Prefetcher> std::fmt::Debug for FileHandleType<Client, Prefetcher>
+impl<Client, Prefetcher> std::fmt::Debug for FileHandleState<Client, Prefetcher>
 where
     Client: ObjectClient + Send + Sync + 'static + std::fmt::Debug,
     Prefetcher: Prefetch,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Read { request: _, etag } => f.debug_struct("Read").field("etag", etag).finish(),
-            Self::Write(arg0) => f.debug_tuple("Write").field(arg0).finish(),
-        }
+        f.debug_struct("FileHandleState")
+            .field("writer", &self.writer)
+            .field("etag", &self.etag)
+            .finish()
     }
 }
 
-impl<Client, Prefetcher> FileHandleType<Client, Prefetcher>
+impl<Client, Prefetcher> FileHandleState<Client, Prefetcher>
 where
     Client: ObjectClient + Send + Sync,
     Prefetcher: Prefetch,
 {
-    async fn new_write_handle(
+    async fn init(
         lookup: &LookedUp,
         ino: InodeNo,
-        flags: i32,
-        pid: u32,
         fs: &S3Filesystem<Client, Prefetcher>,
-    ) -> Result<FileHandleType<Client, Prefetcher>, Error> {
-        // We can't support O_SYNC writes because they require the data to go to stable storage
-        // at `write` time, but we only commit a PUT at `close` time.
-        if flags & (libc::O_SYNC | libc::O_DSYNC) != 0 {
-            return Err(err!(libc::EINVAL, "O_SYNC and O_DSYNC are not supported"));
-        }
-
-        let handle = match fs.superblock.write(&fs.client, ino, lookup.inode.parent(), pid).await {
-            Ok(handle) => handle,
-            Err(e) => {
-                return Err(e.into());
-            }
-        };
-        let key = lookup.inode.full_key();
-        let handle = match fs.uploader.put(&fs.bucket, key).await {
-            Err(e) => {
-                return Err(err!(libc::EIO, source:e, "put failed to start"));
-            }
-            Ok(request) => FileHandleType::Write(UploadState::InProgress { request, handle }.into()),
-        };
-        metrics::increment_gauge!("fs.current_handles", 1.0, "type" => "write");
-        Ok(handle)
-    }
-
-    async fn new_read_handle(lookup: &LookedUp) -> Result<FileHandleType<Client, Prefetcher>, Error> {
+        pid: u32,
+    ) -> Result<FileHandleState<Client, Prefetcher>, Error> {
         if !lookup.stat.is_readable {
             return Err(err!(
                 libc::EACCES,
                 "objects in flexible retrieval storage classes are not accessible",
             ));
         }
-        lookup.inode.start_reading()?;
-        let handle = FileHandleType::Read {
-            request: Default::default(),
-            etag: match &lookup.stat.etag {
-                None => return Err(err!(libc::EBADF, "no E-Tag for inode {}", lookup.inode.ino())),
-                Some(etag) => ETag::from_str(etag).expect("E-Tag should be set"),
-            },
+
+        let handle = fs
+            .superblock
+            .write(&fs.client, ino, lookup.inode.parent(), pid, fs.config.allow_overwrite)
+            .await;
+        let key = lookup.inode.full_key();
+        let new_file = !lookup.inode.is_remote()?;
+
+        let upload_state = UploadState::NotStarted {
+            handle,
+            bucket: fs.bucket.clone(),
+            key: key.to_owned(),
+            new_file,
         };
-        metrics::increment_gauge!("fs.current_handles", 1.0, "type" => "read");
-        Ok(handle)
+
+        let state = FileHandleState {
+            reader: Default::default(),
+            writer: upload_state.into(),
+            etag: lookup.stat.etag.clone().map(|etag| ETag::from_str(&etag).unwrap()),
+        };
+        metrics::increment_gauge!("fs.current_handles", 1.0);
+        Ok(state)
     }
 }
 
 #[derive(Debug)]
 enum UploadState<Client: ObjectClient> {
+    NotStarted {
+        handle: WriteHandle,
+        bucket: String,
+        key: String,
+        new_file: bool,
+    },
     InProgress {
         request: UploadRequest<Client>,
         handle: WriteHandle,
@@ -153,8 +146,29 @@ enum UploadState<Client: ObjectClient> {
 }
 
 impl<Client: ObjectClient> UploadState<Client> {
-    async fn write(&mut self, offset: i64, data: &[u8], key: &str) -> Result<u32, Error> {
+    async fn write(&mut self, offset: i64, data: &[u8], key: &str, uploader: &Uploader<Client>) -> Result<u32, Error> {
         let upload = match self {
+            // Start the upload if it has not started yet
+            Self::NotStarted {
+                handle, bucket, key, ..
+            } => {
+                let handle = handle.clone().start_writing()?;
+                let request = match uploader.put(bucket, key).await {
+                    Err(e) => {
+                        return Err(err!(libc::EIO, source:e, "put failed to start"));
+                    }
+                    Ok(request) => request,
+                };
+                let in_progress = Self::InProgress { request, handle };
+
+                // Change the state from NotStarted to InProgress
+                let _ = std::mem::replace(self, in_progress);
+                if let Self::InProgress { request, .. } = self {
+                    request
+                } else {
+                    unreachable!("upload must be in progress");
+                }
+            }
             Self::InProgress { request, .. } => request,
             Self::Completed => return Err(err!(libc::EIO, "upload already completed for key {:?}", key)),
             Self::Failed(e) => return Err(err!(*e, "upload already aborted for key {:?}", key)),
@@ -171,40 +185,69 @@ impl<Client: ObjectClient> UploadState<Client> {
                             error!(?err, ?key, "error updating the inode status");
                         }
                     }
-                    Self::Failed(_) | Self::Completed => unreachable!("checked above"),
+                    UploadState::NotStarted { .. } | Self::Failed(_) | Self::Completed => unreachable!("checked above"),
                 };
                 Err(e.into())
             }
         }
     }
 
-    async fn complete(&mut self, key: &str, ignore_if_empty: bool, pid: Option<u32>) -> Result<(), Error> {
-        match self {
-            Self::InProgress { request, handle } => {
-                if ignore_if_empty && request.size() == 0 {
-                    trace!(key, "not completing upload because file is empty");
+    async fn complete(
+        &mut self,
+        key: &str,
+        ignore_if_empty: bool,
+        pid: Option<u32>,
+        uploader: &Uploader<Client>,
+    ) -> Result<(), Error> {
+        let (request_size, open_pid) = match self {
+            Self::NotStarted {
+                handle, bucket, key, ..
+            } => {
+                // Force start the upload if we are not ignoring empty file
+                if !ignore_if_empty {
+                    let handle = handle.clone().start_writing()?;
+                    let key = key.clone();
+                    let open_pid = handle.pid();
+                    let request = match uploader.put(bucket, &key).await {
+                        Err(e) => {
+                            return Err(err!(libc::EIO, source:e, "put failed to start"));
+                        }
+                        Ok(request) => request,
+                    };
+                    let in_progress = Self::InProgress { request, handle };
+
+                    // Change the state from NotStarted to InProgress
+                    let _ = std::mem::replace(self, in_progress);
+                    (0, open_pid)
+                } else {
+                    trace!("not completing upload because it has not started yet");
                     return Ok(());
                 }
-                if let Some(pid) = pid {
-                    let open_pid = handle.pid();
-                    if !are_from_same_process(open_pid, pid) {
-                        trace!(
-                            key,
-                            pid,
-                            open_pid,
-                            "not completing upload because current pid differs from pid at open"
-                        );
-                        return Ok(());
-                    }
-                }
             }
+            Self::InProgress { request, handle } => (request.size(), handle.pid()),
             Self::Completed => return Ok(()),
             Self::Failed(e) => return Err(err!(*e, "upload already aborted for key {:?}", key)),
         };
 
+        if ignore_if_empty && request_size == 0 {
+            trace!(key, "not completing upload because file is empty");
+            return Ok(());
+        }
+        if let Some(pid) = pid {
+            if !are_from_same_process(open_pid, pid) {
+                trace!(
+                    key,
+                    pid,
+                    open_pid,
+                    "not completing upload because current pid differs from pid at open"
+                );
+                return Ok(());
+            }
+        }
+
         let (upload, handle) = match std::mem::replace(self, Self::Completed) {
             Self::InProgress { request, handle } => (request, handle),
-            Self::Failed(_) | Self::Completed => unreachable!("checked above"),
+            Self::NotStarted { .. } | Self::Failed(_) | Self::Completed => unreachable!("checked above"),
         };
 
         let result = Self::complete_upload(upload, key, handle).await;
@@ -214,8 +257,29 @@ impl<Client: ObjectClient> UploadState<Client> {
         result
     }
 
-    async fn complete_if_in_progress(self, key: &str) -> Result<(), Error> {
+    async fn complete_if_in_progress(self, key: &str, uploader: &Uploader<Client>) -> Result<(), Error> {
         match self {
+            Self::NotStarted {
+                handle,
+                bucket,
+                key,
+                new_file,
+            } => {
+                // If this is a new file and upload has not started yet, it means we are trying to complete an empty file.
+                // So, we will start writing here to upload a zero byte object.
+                if new_file {
+                    let handle = handle.start_writing()?;
+                    let request = match uploader.put(&bucket, &key).await {
+                        Err(e) => {
+                            return Err(err!(libc::EIO, source:e, "put failed to start"));
+                        }
+                        Ok(request) => request,
+                    };
+                    Self::complete_upload(request, &key, handle).await
+                } else {
+                    Ok(())
+                }
+            }
             Self::InProgress { request, handle } => Self::complete_upload(request, key, handle).await,
             Self::Failed(_) | Self::Completed => Ok(()),
         }
@@ -329,6 +393,8 @@ pub struct S3FilesystemConfig {
     pub file_mode: u16,
     /// Allow delete
     pub allow_delete: bool,
+    /// Allow overwrite
+    pub allow_overwrite: bool,
     /// Storage class to be used for new object uploads
     pub storage_class: Option<String>,
     /// S3 personality (for different S3 semantics)
@@ -348,6 +414,7 @@ impl Default for S3FilesystemConfig {
             dir_mode: 0o755,
             file_mode: 0o644,
             allow_delete: false,
+            allow_overwrite: false,
             storage_class: None,
             s3_personality: S3Personality::Standard,
         }
@@ -609,29 +676,35 @@ where
             InodeKind::File => (),
         }
 
-        let handle_type = if flags & libc::O_RDWR != 0 {
-            let remote_file = lookup.inode.is_remote()?;
-            if remote_file {
-                trace!("fs:open choosing read handle for O_RDWR");
-                FileHandleType::new_read_handle(&lookup).await?
-            } else {
-                trace!("fs:open choosing write handle for O_RDWR");
-                FileHandleType::new_write_handle(&lookup, ino, flags, pid, self).await?
-            }
-        } else if flags & libc::O_WRONLY != 0 {
-            FileHandleType::new_write_handle(&lookup, ino, flags, pid, self).await?
-        } else {
-            FileHandleType::new_read_handle(&lookup).await?
-        };
-
+        let inode = lookup.inode.clone();
         let full_key = lookup.inode.full_key().to_owned();
+        let object_size = lookup.stat.size as u64;
+        let remote_file = lookup.inode.is_remote()?;
+
+        // Open with O_APPEND is ok for new files because it's same as creating a new one.
+        // but we can't support it on existing files and we should explicitly say we don't allow that.
+        if remote_file && (flags & libc::O_APPEND != 0) {
+            return Err(err!(libc::EINVAL, "O_APPEND is not supported on existing files"));
+        }
+
+        // We can't support O_SYNC writes because they require the data to go to stable storage
+        // at `write` time, but we only commit a PUT at `close` time.
+        if flags & (libc::O_SYNC | libc::O_DSYNC) != 0 {
+            return Err(err!(libc::EINVAL, "O_SYNC and O_DSYNC are not supported"));
+        }
+
+        let read_only = flags == libc::O_RDONLY;
+        let write_only = (flags & libc::O_WRONLY) != 0;
+        let state = FileHandleState::init(&lookup, ino, self, pid).await?;
 
         let fh = self.next_handle();
         let handle = FileHandle {
-            inode: lookup.inode,
+            inode,
             full_key,
-            object_size: lookup.stat.size as u64,
-            typ: handle_type,
+            object_size,
+            state,
+            read_only,
+            write_only,
         };
         debug!(fh, ino, "new file handle created");
         self.file_handles.write().await.insert(fh, Arc::new(handle));
@@ -668,16 +741,24 @@ where
             }
         };
         logging::record_name(handle.inode.name());
-        let file_etag: ETag;
-        let mut request = match &handle.typ {
-            FileHandleType::Write { .. } => return reply.error(err!(libc::EBADF, "file handle is not open for reads")),
-            FileHandleType::Read { request, etag } => {
-                file_etag = etag.clone();
-                request.lock().await
+        if handle.write_only {
+            return reply.error(err!(libc::EBADF, "file handle is not open for reads"));
+        }
+        let state = &handle.state;
+        let file_etag = match &state.etag {
+            None => {
+                return reply.error(err!(libc::EBADF, "no E-Tag for inode {}", ino));
             }
+            Some(etag) => etag.clone(),
         };
+        let mut request = state.reader.lock().await;
 
         if request.is_none() {
+            let start_reading = self.superblock.read(&self.client, ino).await;
+            if start_reading.is_err() {
+                let e = start_reading.unwrap_err();
+                return reply.error(e.into());
+            };
             *request = Some(self.prefetcher.prefetch(
                 self.client.clone(),
                 &self.bucket,
@@ -775,11 +856,12 @@ where
         logging::record_name(handle.inode.name());
 
         let len = {
-            let mut request = match &handle.typ {
-                FileHandleType::Write(request) => request.lock().await,
-                FileHandleType::Read { .. } => return Err(err!(libc::EBADF, "file handle is not open for writes")),
-            };
-            request.write(offset, data, &handle.full_key).await?
+            if handle.read_only {
+                return Err(err!(libc::EBADF, "file handle is not open for writes"));
+            }
+            let state = &handle.state;
+            let mut request = state.writer.lock().await;
+            request.write(offset, data, &handle.full_key, &self.uploader).await?
         };
         handle.inode.inc_file_size(len as usize);
         Ok(len)
@@ -975,11 +1057,16 @@ where
             }
         };
         logging::record_name(file_handle.inode.name());
-        let mut request = match &file_handle.typ {
-            FileHandleType::Write(request) => request.lock().await,
-            FileHandleType::Read { .. } => return Ok(()),
-        };
-        match request.complete(&file_handle.full_key, ignore_if_empty, pid).await {
+        if file_handle.read_only {
+            return Ok(());
+        }
+        let state = &file_handle.state;
+        let mut request = state.writer.lock().await;
+
+        match request
+            .complete(&file_handle.full_key, ignore_if_empty, pid, &self.uploader)
+            .await
+        {
             // According to the `fsync` man page we should return ENOSPC instead of EFBIG if it's a
             // space-related failure.
             Err(e) if e.to_errno() == libc::EFBIG => Err(err!(libc::ENOSPC, source:e, "object too big")),
@@ -1036,24 +1123,18 @@ where
             }
         };
 
-        match file_handle.typ {
-            FileHandleType::Write(request) => {
-                let result = request
-                    .into_inner()
-                    .complete_if_in_progress(&file_handle.full_key)
-                    .await;
-                metrics::decrement_gauge!("fs.current_handles", 1.0, "type" => "write");
-                // Errors won't actually be seen by the user because `release` is async,
-                // but it's the right thing to do.
-                result
-            }
-            FileHandleType::Read { request: _, etag: _ } => {
-                // TODO make sure we cancel the inflight PrefetchingGetRequest. is just dropping enough?
-                file_handle.inode.finish_reading()?;
-                metrics::decrement_gauge!("fs.current_handles", 1.0, "type" => "read");
-                Ok(())
-            }
+        let state = file_handle.state;
+        let result = state
+            .writer
+            .into_inner()
+            .complete_if_in_progress(&file_handle.full_key, &self.uploader)
+            .await;
+        if state.reader.into_inner().is_some() {
+            // TODO make sure we cancel the inflight PrefetchingGetRequest. is just dropping enough?
+            file_handle.inode.finish_reading()?;
         }
+        metrics::decrement_gauge!("fs.current_handles", 1.0);
+        result
     }
 
     pub async fn rmdir(&self, parent_ino: InodeNo, name: &OsStr) -> Result<(), Error> {

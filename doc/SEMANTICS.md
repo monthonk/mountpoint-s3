@@ -13,7 +13,7 @@ While the rest of this document gives details on specific file system behaviors,
 
 Mountpoint supports opening and reading existing objects from your S3 bucket. It is optimized for reading large files sequentially, and will automatically make multiple concurrent requests to S3 to improve throughput when reads are sequential. Mountpoint also supports random reads from an existing object, including seeking in an open file.
 
-Mountpoint supports writing only to new files, and writes to new files must be made sequentially. If you try to open an existing file with write access, the open operation will fail with a permissions error. Mountpoint uploads new files to S3 asynchronously, and optimizes for high write throughput using multiple concurrent upload requests. If your application needs to guarantee that a new file has been uploaded to S3, it should call `fsync` on the file before closing it. You cannot continue writing to the file after calling `fsync`.
+Mountpoint supports writing only to new files by default. Writes to existing files are allowed only if `--allow-overwrite` flag is set at startup time. All the writes must start from the beginning of the files and must be made sequentially. Mountpoint uploads new files to S3 asynchronously, and optimizes for high write throughput using multiple concurrent upload requests. If your application needs to guarantee that a new file has been uploaded to S3, it should call `fsync` on the file before closing it. You cannot continue writing to the file after calling `fsync`.
 
 By default, Mountpoint does not allow deleting existing objects with commands like `rm`. To enable deletion, pass the `--allow-delete` flag to Mountpoint at startup time. Delete operations immediately delete the object from S3, even if the file is being read from. We recommend that you enable [Bucket Versioning](https://docs.aws.amazon.com/AmazonS3/latest/userguide/Versioning.html) to help protect against unintentionally deleting objects. You cannot delete a file while it is being written.
 
@@ -166,6 +166,8 @@ but with some limitations:
 * Writes are only supported to new files, and must be done sequentially.
 * Modifying existing files is not supported.
 * Truncation is not supported.
+* Append is not supported, the writes must start from the beginning of the files.
+* Overwrites can be enabled with `--allow-overwrite` flag. The upload will start as soon as Mountpoint receives `write` or `fsync` requests and cannot be aborted. Once it is started the file is guaranteed to be overwritten.
 
 Synchronization operations (`fsync`, `fdatasync`) complete the upload of the object to S3 and disallow
 further writes.

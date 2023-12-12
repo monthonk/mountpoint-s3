@@ -31,6 +31,7 @@ env:
   S3_OLAP_ARN: ${{ vars.S3_OLAP_ARN }}
   S3_MRAP_ARN: ${{ vars.S3_MRAP_ARN }}
   RUST_FEATURES: fuse_tests,s3_tests,fips_tests
+  RUST_LOG: debug,awscrt=off
 
 permissions:
   id-token: write

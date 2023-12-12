@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "overwrite_test" ]
   pull_request:
     branches: [ "main" ]
   merge_group:
@@ -13,6 +13,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   RUST_FEATURES: fuse_tests
+  RUST_LOG: debug,awscrt=off
 
 jobs:
   test:

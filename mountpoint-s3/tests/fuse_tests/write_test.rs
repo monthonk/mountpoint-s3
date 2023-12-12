@@ -4,6 +4,7 @@ use std::os::unix::prelude::OpenOptionsExt;
 use std::path::Path;
 use std::process::Command;
 use std::thread;
+use std::time::Duration;
 
 use fuser::BackgroundSession;
 use rand::{Rng, SeedableRng};
@@ -726,6 +727,9 @@ where
     drop(fh);
     drop(write_fh);
 
+    // Add some delay because release is asynchronous
+    std::thread::sleep(Duration::from_secs(1));
+
     // The file will be overwritten if fsync is called after open
     let mut options = File::options();
     let write_fh = options.write(true).open(&path).unwrap();
@@ -739,6 +743,9 @@ where
     read_fh.read_to_string(&mut hello_contents).unwrap();
     assert!(hello_contents.is_empty());
     drop(read_fh);
+
+    // Add some delay because release is asynchronous
+    std::thread::sleep(Duration::from_secs(1));
 
     // Open with O_RDWR and write something to the file
     let mut options = File::options();
@@ -754,6 +761,9 @@ where
     read_fh.read_to_string(&mut hello_contents).unwrap();
     assert_eq!(hello_contents, "first overwrite");
     drop(read_fh);
+
+    // Add some delay because release is asynchronous
+    std::thread::sleep(Duration::from_secs(1));
 
     // Open with O_WRONLY and write something to the file
     let mut options = File::options();

@@ -281,11 +281,11 @@ impl Superblock {
         ino: InodeNo,
         parent_ino: InodeNo,
         pid: u32,
-        allow_overwrite: bool,
+        overwritable: bool,
     ) -> WriteHandle {
         trace!(?ino, parent=?parent_ino, "write");
 
-        WriteHandle::new(self.inner.clone(), ino, parent_ino, pid, allow_overwrite)
+        WriteHandle::new(self.inner.clone(), ino, parent_ino, pid, overwritable)
     }
 
     /// Start a new perfetching stream for the given inode
@@ -1064,18 +1064,18 @@ pub struct WriteHandle {
     ino: InodeNo,
     parent_ino: InodeNo,
     pid: u32,
-    allow_overwrite: bool,
+    overwritable: bool,
 }
 
 impl WriteHandle {
     /// Create a new write handle
-    fn new(inner: Arc<SuperblockInner>, ino: InodeNo, parent_ino: InodeNo, pid: u32, allow_overwrite: bool) -> Self {
+    fn new(inner: Arc<SuperblockInner>, ino: InodeNo, parent_ino: InodeNo, pid: u32, overwritable: bool) -> Self {
         Self {
             inner,
             ino,
             parent_ino,
             pid,
-            allow_overwrite,
+            overwritable,
         }
     }
 
@@ -1094,7 +1094,7 @@ impl WriteHandle {
             }
             WriteStatus::LocalOpen => Err(InodeError::InodeAlreadyWriting(inode.err())),
             WriteStatus::Remote => {
-                if self.allow_overwrite {
+                if self.overwritable {
                     state.write_status = WriteStatus::LocalOpen;
                     state.stat.size = 0;
                     Ok(self)

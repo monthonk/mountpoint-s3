@@ -287,6 +287,7 @@ where
         .open(&file_path)
         .unwrap();
     fh.write_all(b"new contents").expect("write should succeed");
+    fh.seek(std::io::SeekFrom::End(-1)).unwrap();
     let err = fh.read_to_string(&mut contents).expect_err("read should fail");
     assert_eq!(err.raw_os_error(), Some(libc::EPERM));
 

@@ -2,7 +2,7 @@ name: Integration tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "overwrite_test" ]
   merge_group:
     types: [ "checks_requested" ]
 

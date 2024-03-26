@@ -25,6 +25,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::fmt::{Debug, Display};
 use std::os::unix::prelude::OsStrExt;
+use std::str::FromStr;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime};
 
@@ -86,6 +87,7 @@ pub struct Superblock {
 struct SuperblockInner {
     bucket: String,
     inodes: RwLock<InodeMap>,
+    common_prefixes: RwLock<HashSet<Arc<Prefix>>>,
     negative_cache: NegativeCache,
     next_ino: AtomicU64,
     mount_time: OffsetDateTime,
@@ -108,7 +110,7 @@ impl Superblock {
             ROOT_INODE_NO,
             ROOT_INODE_NO,
             String::new(),
-            prefix.to_string(),
+            Arc::new(prefix.clone()),
             InodeKind::Directory,
             InodeState {
                 // The root inode never expires because there's no remote to consult for its
@@ -129,6 +131,7 @@ impl Superblock {
         let inner = SuperblockInner {
             bucket: bucket.to_owned(),
             inodes: RwLock::new(inodes),
+            common_prefixes: RwLock::new(HashSet::new()),
             negative_cache,
             next_ino: AtomicU64::new(2),
             mount_time,
@@ -520,7 +523,7 @@ impl Superblock {
             WriteStatus::Remote => {
                 let (bucket, s3_key) = (self.inner.bucket.as_str(), inode.full_key());
                 debug!(parent=?parent_ino, ?name, "unlink on remote file will delete key {}", s3_key);
-                let delete_obj_result = client.delete_object(bucket, s3_key).await;
+                let delete_obj_result = client.delete_object(bucket, &s3_key).await;
 
                 match delete_obj_result {
                     Ok(_res) => (),
@@ -1026,17 +1029,23 @@ impl SuperblockInner {
         }
 
         let next_ino = self.next_ino.fetch_add(1, Ordering::SeqCst);
+        let prefix = {
+            let prefix = Prefix::from_str(&parent.full_key()).unwrap();
+            let mut prefix_lock = self.common_prefixes.write().unwrap();
+            match prefix_lock.get(&prefix) {
+                Some(pre) => pre.clone(),
+                None => {
+                    let ref_count = Arc::new(prefix);
+                    prefix_lock.insert(ref_count.clone());
+                    metrics::gauge!("fs.common_prefixes").increment(1.0);
+                    ref_count
+                },
+            }
+        };
 
-        let mut full_key = parent.full_key().to_owned();
-        assert!(full_key.is_empty() || full_key.ends_with('/'));
-        full_key.push_str(name);
-        if kind == InodeKind::Directory {
-            full_key.push('/');
-        }
+        trace!(parent=?parent.ino(), ?name, ?kind, new_ino=?next_ino, ?prefix, "creating new inode");
 
-        trace!(parent=?parent.ino(), ?name, ?kind, new_ino=?next_ino, ?full_key, "creating new inode");
-
-        let inode = Inode::new(next_ino, parent.ino(), name.to_owned(), full_key, kind, state);
+        let inode = Inode::new(next_ino, parent.ino(), name.to_owned(), prefix, kind, state);
 
         match &mut parent_locked.kind_data {
             InodeKindData::File {} => {
@@ -1225,8 +1234,7 @@ struct InodeInner {
     ino: InodeNo,
     parent: InodeNo,
     name: String,
-    // TODO deduplicate keys by string interning or something -- many keys will have common prefixes
-    full_key: String,
+    prefix: Arc<Prefix>,
     kind: InodeKind,
     checksum: Crc32c,
 
@@ -1260,8 +1268,8 @@ impl Inode {
         self.inner.kind
     }
 
-    pub fn full_key(&self) -> &str {
-        &self.inner.full_key
+    pub fn full_key(&self) -> String {
+        Self::full_key_from(&self.inner.name, &self.inner.prefix, self.inner.kind)
     }
 
     /// Increment lookup count for [Inode] by 1, returning the new value.
@@ -1342,14 +1350,15 @@ impl Inode {
         }
     }
 
-    fn new(ino: InodeNo, parent: InodeNo, name: String, full_key: String, kind: InodeKind, state: InodeState) -> Self {
+    fn new(ino: InodeNo, parent: InodeNo, name: String, prefix: Arc<Prefix>, kind: InodeKind, state: InodeState) -> Self {
+        let full_key = Self::full_key_from(&name, &prefix, kind);
         let checksum = Self::compute_checksum(ino, &full_key);
         let sync = RwLock::new(state);
         let inner = InodeInner {
             ino,
             parent,
             name,
-            full_key,
+            prefix,
             kind,
             checksum,
             sync,
@@ -1359,7 +1368,7 @@ impl Inode {
 
     /// Verify [Inode] has the expected inode number and the inode content is valid for its checksum.
     fn verify_inode(&self, expected_ino: InodeNo) -> Result<(), InodeError> {
-        let computed = Self::compute_checksum(self.ino(), self.full_key());
+        let computed = Self::compute_checksum(self.ino(), &self.full_key());
         if computed == self.inner.checksum && self.ino() == expected_ino {
             Ok(())
         } else {
@@ -1370,12 +1379,21 @@ impl Inode {
     /// Verify [Inode] has the expected inode number, expected parent inode number,
     /// and the inode's content is valid for its checksum.
     fn verify_child(&self, expected_parent: InodeNo, expected_name: &str) -> Result<(), InodeError> {
-        let computed = Self::compute_checksum(self.ino(), self.full_key());
+        let computed = Self::compute_checksum(self.ino(), &self.full_key());
         if computed == self.inner.checksum && self.parent() == expected_parent && self.name() == expected_name {
             Ok(())
         } else {
             Err(InodeError::CorruptedMetadata(self.err()))
         }
+    }
+
+    fn full_key_from(name: &str, prefix: &Prefix, kind: InodeKind) -> String {
+        let mut full_key = prefix.to_string();
+        full_key.push_str(name);
+        if !name.is_empty() && kind == InodeKind::Directory {
+            full_key.push('/');
+        }
+        full_key
     }
 
     fn compute_checksum(ino: InodeNo, full_key: &str) -> Crc32c {
@@ -1717,42 +1735,42 @@ mod tests {
                 .await
                 .expect("should exist");
             assert_inode_stat!(dir0, InodeKind::Directory, ts, 0);
-            assert_eq!(dir0.inode.full_key(), OsString::from(format!("{prefix}dir0/")));
+            assert_eq!(dir0.inode.full_key().as_str(), OsString::from(format!("{prefix}dir0/")));
 
             let dir1 = superblock
                 .lookup(&client, FUSE_ROOT_INODE, &OsString::from("dir1"))
                 .await
                 .expect("should exist");
             assert_inode_stat!(dir1, InodeKind::Directory, ts, 0);
-            assert_eq!(dir1.inode.full_key(), OsString::from(format!("{prefix}dir1/")));
+            assert_eq!(dir1.inode.full_key().as_str(), OsString::from(format!("{prefix}dir1/")));
 
             let sdir0 = superblock
                 .lookup(&client, dir0.inode.ino(), &OsString::from("sdir0"))
                 .await
                 .expect("should exist");
             assert_inode_stat!(sdir0, InodeKind::Directory, ts, 0);
-            assert_eq!(sdir0.inode.full_key(), OsString::from(format!("{prefix}dir0/sdir0/")));
+            assert_eq!(sdir0.inode.full_key().as_str(), OsString::from(format!("{prefix}dir0/sdir0/")));
 
             let sdir1 = superblock
                 .lookup(&client, dir0.inode.ino(), &OsString::from("sdir1"))
                 .await
                 .expect("should exist");
             assert_inode_stat!(sdir1, InodeKind::Directory, ts, 0);
-            assert_eq!(sdir1.inode.full_key(), OsString::from(format!("{prefix}dir0/sdir1/")));
+            assert_eq!(sdir1.inode.full_key().as_str(), OsString::from(format!("{prefix}dir0/sdir1/")));
 
             let sdir2 = superblock
                 .lookup(&client, dir1.inode.ino(), &OsString::from("sdir2"))
                 .await
                 .expect("should exist");
             assert_inode_stat!(sdir2, InodeKind::Directory, ts, 0);
-            assert_eq!(sdir2.inode.full_key(), OsString::from(format!("{prefix}dir1/sdir2/")));
+            assert_eq!(sdir2.inode.full_key().as_str(), OsString::from(format!("{prefix}dir1/sdir2/")));
 
             let sdir3 = superblock
                 .lookup(&client, dir1.inode.ino(), &OsString::from("sdir3"))
                 .await
                 .expect("should exist");
             assert_inode_stat!(sdir3, InodeKind::Directory, ts, 0);
-            assert_eq!(sdir3.inode.full_key(), OsString::from(format!("{prefix}dir1/sdir3/")));
+            assert_eq!(sdir3.inode.full_key().as_str(), OsString::from(format!("{prefix}dir1/sdir3/")));
 
             for (dir, sdir, ino, n) in &[
                 (0, 0, sdir0.inode.ino(), 3),
@@ -1767,14 +1785,14 @@ mod tests {
                         .expect("inode should exist");
                     // Grab last modified time according to mock S3
                     let modified_time = client
-                        .head_object(bucket, file.inode.full_key())
+                        .head_object(bucket, &file.inode.full_key())
                         .await
                         .expect("object should exist")
                         .object
                         .last_modified;
                     assert_inode_stat!(file, InodeKind::File, modified_time, object_size);
                     assert_eq!(
-                        file.inode.full_key(),
+                        file.inode.full_key().as_str(),
                         OsString::from(format!("{prefix}dir{dir}/sdir{sdir}/file{i}.txt"))
                     );
                 }
@@ -1923,11 +1941,12 @@ mod tests {
         let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
         let ino = 42;
         let inode_name = "made-up-inode";
+        let prefix = Arc::new(Prefix::default());
         let inode = Inode::new(
             ino,
             ROOT_INODE_NO,
             inode_name.to_owned(),
-            inode_name.to_owned(),
+            prefix,
             InodeKind::File,
             InodeState {
                 write_status: WriteStatus::Remote,
@@ -2563,12 +2582,13 @@ mod tests {
         // checksum not matching ino + full key.
         let parent_ino = FUSE_ROOT_INODE;
         let bad_checksum = Crc32c::new(42);
+        let prefix = Arc::new(Prefix::default());
         let inode = Inode {
             inner: Arc::new(InodeInner {
                 ino: 42,
                 parent: parent_ino,
                 name: file_name.into(),
-                full_key: file_name.into(),
+                prefix,
                 kind: InodeKind::File,
                 checksum: bad_checksum,
                 sync: RwLock::new(InodeState {
@@ -2739,7 +2759,7 @@ mod tests {
             .lookup(&client, FUSE_ROOT_INODE, OsStr::from_bytes("dir".as_bytes()))
             .await
             .unwrap();
-        assert_eq!(dir.inode.full_key(), OsString::from("dir/"));
+        assert_eq!(dir.inode.full_key().as_str(), OsString::from("dir/"));
     }
 
     #[tokio::test]
@@ -2876,12 +2896,13 @@ mod tests {
         hasher.update(ino.to_be_bytes().as_ref());
         hasher.update(inode_name.as_bytes());
         let checksum = hasher.finalize();
+        let prefix = Arc::new(Prefix::default());
         let inode = Inode {
             inner: Arc::new(InodeInner {
                 ino,
                 parent: ROOT_INODE_NO,
                 name: inode_name.to_owned(),
-                full_key: inode_name.to_owned(),
+                prefix,
                 kind: InodeKind::File,
                 checksum,
                 sync: RwLock::new(InodeState {

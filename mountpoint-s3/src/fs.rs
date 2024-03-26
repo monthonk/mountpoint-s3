@@ -117,7 +117,7 @@ where
             .await
             .start_writing()?;
         let key = lookup.inode.full_key();
-        let handle = match fs.uploader.put(&fs.bucket, key).await {
+        let handle = match fs.uploader.put(&fs.bucket, &key).await {
             Err(e) => {
                 return Err(err!(libc::EIO, source:e, "put failed to start"));
             }

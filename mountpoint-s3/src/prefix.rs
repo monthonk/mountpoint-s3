@@ -10,7 +10,7 @@ pub enum PrefixError {
 }
 
 /// A prefix string ending in `/`, or the empty string
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Prefix {
     path: String,
 }

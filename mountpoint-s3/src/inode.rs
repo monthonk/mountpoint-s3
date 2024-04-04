@@ -86,8 +86,10 @@ pub struct Superblock {
 struct SuperblockInner {
     bucket: String,
     inodes: RwLock<InodeMap>,
+    removed_inodes: RwLock<HashMap<InodeNo, RemovedInode>>,
     negative_cache: NegativeCache,
     next_ino: AtomicU64,
+    oldest_ino: AtomicU64,
     mount_time: OffsetDateTime,
     config: SuperblockConfig,
 }
@@ -129,8 +131,10 @@ impl Superblock {
         let inner = SuperblockInner {
             bucket: bucket.to_owned(),
             inodes: RwLock::new(inodes),
+            removed_inodes: RwLock::new(HashMap::new()),
             negative_cache,
             next_ino: AtomicU64::new(2),
+            oldest_ino: ROOT_INODE_NO.into(),
             mount_time,
             config,
         };
@@ -145,11 +149,7 @@ impl Superblock {
             if let Some(inode) = self.inner.inodes.read().unwrap().get(&ino).cloned() {
                 inode
             } else {
-                debug_assert!(
-                    false,
-                    "forget should not be called on inode already removed from superblock"
-                );
-                error!("forget called on inode {ino} already removed from the superblock");
+                warn!("forget called on inode {ino} already removed from the superblock");
                 return;
             }
         };
@@ -227,7 +227,10 @@ impl Superblock {
         ino: InodeNo,
         force_revalidate: bool,
     ) -> Result<LookedUp, InodeError> {
-        let inode = self.inner.get(ino)?;
+        let inode = match self.inner.get(ino) {
+            Ok(inode) => inode,
+            Err(_) => self.inner.find_from_removed(ino)?,
+        };
         logging::record_name(inode.name());
 
         if !force_revalidate {
@@ -579,12 +582,100 @@ impl SuperblockInner {
         Ok(inode)
     }
 
+    pub fn find_from_removed(&self, ino: InodeNo) -> Result<Inode, InodeError> {
+        if let Some(inode) = self.removed_inodes.read().unwrap().get(&ino) {
+            tracing::info!("found ino {ino} from removed inodes");
+            let parent_inode = self.get(inode.parent)?;
+            let mut parent_state = parent_inode.get_mut_inode_state()?;
+
+            // force the stat to always expire
+            let stat = InodeStat::for_file(
+                0,
+                OffsetDateTime::now_utc(),
+                None,
+                None,
+                None,
+                Duration::from_secs(0),
+            );
+
+            let state = InodeState {
+                stat: stat.clone(),
+                kind_data: InodeKindData::default_for(InodeKind::File),
+                write_status: WriteStatus::LocalUnopened,
+                lookup_count: 0,
+                reader_count: 0,
+            };
+
+            let inode = self.create_inode_locked(&parent_inode, &mut parent_state, &inode.name, InodeKind::File, state, false)?;
+            return Ok(inode);
+        }
+        Err(InodeError::InodeDoesNotExist(ino))
+    }
+
     /// Increase the lookup count of the given inode and
     /// ensure it is registered with this superblock.
     pub fn remember(&self, inode: &Inode) -> u64 {
         let lookup_count = inode.inc_lookup_count();
         if lookup_count == 1 {
-            let previous = self.inodes.write().unwrap().insert(inode.ino(), inode.clone());
+            let mut inodes = self.inodes.write().unwrap();
+            if inodes.len() > 100_000 {
+                loop {
+                    let to_remove = self.oldest_ino.fetch_add(1, Ordering::SeqCst);
+                    if let Some(inode) = inodes.get(&to_remove) {
+                        let inode = inode.clone();
+                        if inode.kind() == InodeKind::File {
+                            // let new_lookup_count = inode.dec_lookup_count(1);
+                            // if new_lookup_count == 0 {
+                                // Safe to remove, kernel no longer has a reference to it.
+                                let ino = inode.ino();
+
+                                let removed_inode = RemovedInode {
+                                    parent: inode.parent(),
+                                    name: inode.name().to_owned(),
+                                };
+                                self.removed_inodes.write().unwrap().insert(ino, removed_inode);
+                                inodes.remove(&ino);
+                                metrics::counter!("fs.removed_inodes").increment(1);
+                                tracing::info!("removing inode {} {}", ino, inode.name());
+
+                                let parent = {
+                                    if let Some(parent) = inodes.get(&inode.parent()).cloned() {
+                                        parent
+                                    } else {
+                                        // Should be impossible for this to fail (VFS inodes reference their parent, so
+                                        // children need to be freed first), but let's not crash in a `forget` function...
+                                        debug_assert!(false, "children should be forgotten before parents");
+                                        continue;
+                                    }
+                                };
+                                let mut parent_state = parent.inner.sync.write().unwrap();
+                                let InodeKindData::Directory {
+                                    children,
+                                    writing_children,
+                                    ..
+                                } = &mut parent_state.kind_data
+                                else {
+                                    unreachable!("parent is always a directory");
+                                };
+                                if let Some(child) = children.get(inode.name()) {
+                                    // Don't accidentally remove a newer inode (e.g. remote shadowing local)
+                                    if child.ino() == ino {
+                                        children.remove(inode.name());
+                                    }
+                                }
+                                writing_children.remove(&ino);
+
+                                if let Ok(state) = inode.get_inode_state() {
+                                    metrics::counter!("metadata_cache.inode_forgotten_before_expiry")
+                                        .increment(state.stat.is_valid().into());
+                                };
+                                break;
+                            // }
+                        }
+                    }
+                }
+            }
+            let previous = inodes.insert(inode.ino(), inode.clone());
             assert!(previous.is_none(), "inode numbers are never reused");
         }
         lookup_count
@@ -1214,6 +1305,12 @@ impl WriteHandle {
     }
 }
 
+#[derive(Debug)]
+struct RemovedInode {
+    parent: InodeNo,
+    name: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Inode {
     inner: Arc<InodeInner>,
@@ -1583,6 +1680,10 @@ struct InodeMap {
 impl InodeMap {
     fn get(&self, ino: &InodeNo) -> Option<&Inode> {
         self.map.get(ino)
+    }
+
+    fn len(&self) -> usize {
+        self.map.len()
     }
 
     fn insert(&mut self, ino: InodeNo, inode: Inode) -> Option<Inode> {

@@ -333,6 +333,8 @@ impl CliArgs {
             filter.push_str(&format!(",{}={}", AWSCRT_LOG_TARGET, crt_verbosity));
             if self.log_metrics {
                 filter.push_str(&format!(",{}=info", metrics::TARGET_NAME));
+            } else {
+                filter.push_str(&format!(",{}=off", metrics::TARGET_NAME));
             }
             filter
         };

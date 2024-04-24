@@ -2,7 +2,8 @@ use std::io;
 
 use anyhow::Context;
 use fuser::{Filesystem, Session, SessionUnmounter};
-use tracing::{debug, error, trace, warn};
+use tracing::{error, trace, warn};
+use tracing_log::log::info;
 
 use crate::sync::atomic::{AtomicUsize, Ordering};
 use crate::sync::mpsc::{self, Sender};
@@ -180,7 +181,7 @@ impl<W: Work> WorkerPool<W> {
     }
 
     fn run(self, worker_index: usize) -> W::Result {
-        debug!("starting fuse worker {} ({})", worker_index, get_thread_id_string());
+        info!("starting fuse worker {} ({})", worker_index, get_thread_id_string());
 
         self.state.work.run(
             || {

@@ -1,4 +1,6 @@
 use std::io;
+use std::sync::Mutex;
+use std::time::Instant;
 
 use anyhow::Context;
 use fuser::{Filesystem, Session, SessionUnmounter};
@@ -182,11 +184,13 @@ impl<W: Work> WorkerPool<W> {
 
     fn run(self, worker_index: usize) -> W::Result {
         info!("starting fuse worker {} ({})", worker_index, get_thread_id_string());
+        let now = Arc::new(Mutex::new(Instant::now()));
 
         self.state.work.run(
             || {
+                *now.lock().unwrap() = Instant::now();
                 let previous_idle_count = self.state.idle_worker_count.fetch_sub(1, Ordering::SeqCst);
-                if previous_idle_count == 1 {
+                if previous_idle_count < 2 {
                     // This was the only idle thread, try to spawn a new one.
                     if let Err(error) = self.try_add_worker() {
                         warn!(?error, "unable to spawn fuse worker");
@@ -195,6 +199,8 @@ impl<W: Work> WorkerPool<W> {
             },
             || {
                 self.state.idle_worker_count.fetch_add(1, Ordering::SeqCst);
+                let elapsed = now.lock().unwrap().elapsed();
+                metrics::histogram!("fuse.queue_starved_us").record(elapsed.as_micros() as f64);
             },
         )
     }

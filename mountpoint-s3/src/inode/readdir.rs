@@ -35,13 +35,14 @@
 //!   These children are listed only once, at the start of the readdir operation, and so are a
 //!   snapshot in time of the directory.
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::RwLock};
 use std::collections::VecDeque;
 
 use mountpoint_s3_client::types::ObjectInfo;
 use mountpoint_s3_client::ObjectClient;
 use tracing::{error, trace, warn};
 
+use crate::fs_notifier::S3FilesystemNotifier;
 use crate::sync::{Arc, AsyncMutex, Mutex};
 
 use super::{
@@ -147,6 +148,7 @@ impl ReaddirHandle {
     /// ensure it is registered with the superblock.
     pub fn remember(&self, entry: &LookedUp) {
         self.inner.remember(&entry.inode);
+        // let _ = self.inner.cleanup_inodes();
     }
 
     /// Return the inode number of the parent directory of this directory handle

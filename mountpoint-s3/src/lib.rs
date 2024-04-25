@@ -3,6 +3,7 @@ mod build_info;
 mod checksums;
 pub mod cli;
 pub mod data_cache;
+pub mod fs_notifier;
 pub mod fs;
 pub mod fuse;
 mod inode;

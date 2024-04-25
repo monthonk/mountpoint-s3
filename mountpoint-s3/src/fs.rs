@@ -6,6 +6,7 @@ use nix::unistd::{getgid, getuid};
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::str::FromStr;
+use std::sync::{Mutex};
 use std::time::{Duration, UNIX_EPOCH};
 use thiserror::Error;
 use time::OffsetDateTime;
@@ -17,6 +18,7 @@ use mountpoint_s3_client::error::{GetObjectError, ObjectClientError};
 use mountpoint_s3_client::types::ETag;
 use mountpoint_s3_client::ObjectClient;
 
+use crate::fs_notifier::S3FilesystemNotifier;
 use crate::inode::{Inode, InodeError, InodeKind, LookedUp, ReaddirHandle, Superblock, SuperblockConfig, WriteHandle};
 use crate::logging;
 use crate::prefetch::{Prefetch, PrefetchReadError, PrefetchResult};
@@ -533,6 +535,7 @@ where
         bucket: &str,
         prefix: &Prefix,
         config: S3FilesystemConfig,
+        notifier: Arc<Mutex<S3FilesystemNotifier>>,
     ) -> Self {
         trace!(?bucket, ?prefix, ?config, "new filesystem");
 
@@ -540,7 +543,7 @@ where
             cache_config: config.cache_config.clone(),
             s3_personality: config.s3_personality,
         };
-        let superblock = Superblock::new(bucket, prefix, superblock_config);
+        let superblock = Superblock::new(bucket, prefix, superblock_config, notifier);
 
         let client = Arc::new(client);
 
@@ -1356,7 +1359,7 @@ mod tests {
             server_side_encryption,
             ..Default::default()
         };
-        let mut fs = S3Filesystem::new(client, prefetcher, bucket, &Default::default(), fs_config);
+        let mut fs = S3Filesystem::new(client, prefetcher, bucket, &Default::default(), fs_config, Default::default());
 
         // Lookup inode of the dir1 directory
         let entry = fs.lookup(FUSE_ROOT_INODE, "dir1".as_ref()).await.unwrap();

@@ -5,6 +5,7 @@ use std::num::NonZeroUsize;
 use std::os::fd::AsRawFd;
 use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{anyhow, Context as _};
@@ -30,6 +31,7 @@ use crate::data_cache::{CacheLimit, DiskDataCache, DiskDataCacheConfig, ManagedC
 #[cfg(feature = "sse_kms")]
 use crate::fs::ServerSideEncryption;
 use crate::fs::{CacheConfig, S3FilesystemConfig, S3Personality};
+use crate::fs_notifier::S3FilesystemNotifier;
 use crate::fuse::session::FuseSession;
 use crate::fuse::S3FuseFilesystem;
 use crate::logging::{init_logging, LoggingConfig};
@@ -715,9 +717,11 @@ where
     Client: ObjectClient + Send + Sync + 'static,
     Prefetcher: Prefetch + Send + Sync + 'static,
 {
-    let fs = S3FuseFilesystem::new(client, prefetcher, bucket_name, prefix, filesystem_config);
+    let notifier = Arc::new(Mutex::new(S3FilesystemNotifier::default()));
+    let fs = S3FuseFilesystem::new(client, prefetcher, bucket_name, prefix, filesystem_config, notifier.clone());
     let session = Session::new(fs, &fuse_session_config.mount_point, &fuse_session_config.options)
         .context("Failed to create FUSE session")?;
+    notifier.lock().unwrap().register(session.notifier());
     let session = FuseSession::new(session, fuse_session_config.max_threads).context("Failed to start FUSE session")?;
 
     tracing::info!(

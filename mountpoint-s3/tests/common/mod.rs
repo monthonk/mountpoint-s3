@@ -49,7 +49,7 @@ where
 {
     let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
     let prefetcher = default_prefetch(runtime, Default::default());
-    S3Filesystem::new(client, prefetcher, bucket, prefix, config)
+    S3Filesystem::new(client, prefetcher, bucket, prefix, config, Default::default())
 }
 
 #[track_caller]

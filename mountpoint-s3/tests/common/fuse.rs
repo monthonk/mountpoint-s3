@@ -1,10 +1,11 @@
 use std::ffi::OsStr;
 use std::fs::ReadDir;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use fuser::{BackgroundSession, MountOption, Session};
 use mountpoint_s3::data_cache::DataCache;
+use mountpoint_s3::fs_notifier::S3FilesystemNotifier;
 use mountpoint_s3::fuse::S3FuseFilesystem;
 use mountpoint_s3::prefetch::{Prefetch, PrefetcherConfig};
 use mountpoint_s3::prefix::Prefix;
@@ -98,7 +99,7 @@ where
 
     let prefix = Prefix::new(prefix).expect("valid prefix");
     let session = Session::new(
-        S3FuseFilesystem::new(client, prefetcher, bucket, &prefix, filesystem_config),
+        S3FuseFilesystem::new(client, prefetcher, bucket, &prefix, filesystem_config, Default::default()),
         mount_dir,
         &options,
     )

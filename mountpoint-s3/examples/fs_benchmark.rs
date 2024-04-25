@@ -1,11 +1,13 @@
 use clap::{Arg, ArgAction, Command};
 use fuser::{BackgroundSession, MountOption, Session};
+use mountpoint_s3::fs_notifier::S3FilesystemNotifier;
 use mountpoint_s3::fuse::S3FuseFilesystem;
 use mountpoint_s3::prefetch::default_prefetch;
 use mountpoint_s3::S3FilesystemConfig;
 use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
 use mountpoint_s3_client::S3CrtClient;
 use mountpoint_s3_crt::common::rust_log_adapter::RustLogAdapter;
+use std::sync::{Arc, RwLock};
 use std::{
     fs::{File, OpenOptions},
     io::{self, BufRead, BufReader},
@@ -166,7 +168,7 @@ fn mount_file_system(bucket_name: &str, region: &str, throughput_target_gbps: Op
     );
     let prefetcher = default_prefetch(runtime, Default::default());
     let session = Session::new(
-        S3FuseFilesystem::new(client, prefetcher, bucket_name, &Default::default(), filesystem_config),
+        S3FuseFilesystem::new(client, prefetcher, bucket_name, &Default::default(), filesystem_config, Default::default()),
         mountpoint,
         &options,
     )

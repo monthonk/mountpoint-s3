@@ -26,6 +26,7 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::{Debug, Display};
 use std::os::unix::prelude::OsStrExt;
 use std::sync::atomic::AtomicBool;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 
 use anyhow::anyhow;
@@ -40,6 +41,7 @@ use time::OffsetDateTime;
 use tracing::{debug, error, trace, warn};
 
 use crate::fs::{CacheConfig, S3Personality};
+use crate::fs_notifier::S3FilesystemNotifier;
 use crate::logging;
 use crate::prefix::Prefix;
 use crate::sync::atomic::{AtomicU64, Ordering};
@@ -86,12 +88,12 @@ pub struct Superblock {
 struct SuperblockInner {
     bucket: String,
     inodes: RwLock<InodeMap>,
-    removed_inodes: RwLock<HashMap<InodeNo, RemovedInode>>,
     negative_cache: NegativeCache,
     next_ino: AtomicU64,
     oldest_ino: AtomicU64,
     mount_time: OffsetDateTime,
     config: SuperblockConfig,
+    notifier: Arc<Mutex<S3FilesystemNotifier>>,
 }
 
 /// Configuration for superblock operations
@@ -103,7 +105,7 @@ pub struct SuperblockConfig {
 
 impl Superblock {
     /// Create a new Superblock that targets the given bucket/prefix
-    pub fn new(bucket: &str, prefix: &Prefix, config: SuperblockConfig) -> Self {
+    pub fn new(bucket: &str, prefix: &Prefix, config: SuperblockConfig, notifier: Arc<Mutex<S3FilesystemNotifier>>) -> Self {
         let mount_time = OffsetDateTime::now_utc();
 
         let root = Inode::new(
@@ -131,12 +133,12 @@ impl Superblock {
         let inner = SuperblockInner {
             bucket: bucket.to_owned(),
             inodes: RwLock::new(inodes),
-            removed_inodes: RwLock::new(HashMap::new()),
             negative_cache,
             next_ino: AtomicU64::new(2),
-            oldest_ino: ROOT_INODE_NO.into(),
+            oldest_ino: AtomicU64::new(50),
             mount_time,
             config,
+            notifier,
         };
         Self { inner: Arc::new(inner) }
     }
@@ -217,6 +219,7 @@ impl Superblock {
             )
             .await?;
         self.inner.remember(&lookup.inode);
+        let _ = self.inner.cleanup_inodes();
         Ok(lookup)
     }
 
@@ -227,10 +230,7 @@ impl Superblock {
         ino: InodeNo,
         force_revalidate: bool,
     ) -> Result<LookedUp, InodeError> {
-        let inode = match self.inner.get(ino) {
-            Ok(inode) => inode,
-            Err(_) => self.inner.find_from_removed(ino)?,
-        };
+        let inode = self.inner.get(ino)?;
         logging::record_name(inode.name());
 
         if !force_revalidate {
@@ -406,6 +406,7 @@ impl Superblock {
         };
 
         self.inner.remember(&lookup.inode);
+        let _ = self.inner.cleanup_inodes();
         Ok(lookup)
     }
 
@@ -582,34 +583,54 @@ impl SuperblockInner {
         Ok(inode)
     }
 
-    pub fn find_from_removed(&self, ino: InodeNo) -> Result<Inode, InodeError> {
-        if let Some(inode) = self.removed_inodes.read().unwrap().get(&ino) {
-            tracing::info!("found ino {ino} from removed inodes");
-            let parent_inode = self.get(inode.parent)?;
-            let mut parent_state = parent_inode.get_mut_inode_state()?;
+    pub fn cleanup_inodes(&self) {
+        let mut inodes = self.inodes.write().unwrap();
+        if inodes.len() > 100 {
+            let to_remove = self.oldest_ino.fetch_add(1, Ordering::SeqCst);
+            if let Some(inode) = inodes.get(&to_remove) {
+                let inode = inode.clone();
+                if inode.kind() == InodeKind::File {
+                    let ino = inode.ino();
 
-            // force the stat to always expire
-            let stat = InodeStat::for_file(
-                0,
-                OffsetDateTime::now_utc(),
-                None,
-                None,
-                None,
-                Duration::from_secs(0),
-            );
+                    inodes.remove(&ino);
+                    metrics::counter!("fs.removed_inodes").increment(1);
+                    tracing::info!("removing inode {} {}", ino, inode.name());
 
-            let state = InodeState {
-                stat: stat.clone(),
-                kind_data: InodeKindData::default_for(InodeKind::File),
-                write_status: WriteStatus::LocalUnopened,
-                lookup_count: 0,
-                reader_count: 0,
-            };
+                    let parent = {
+                        if let Some(parent) = inodes.get(&inode.parent()).cloned() {
+                            parent
+                        } else {
+                            // Should be impossible for this to fail (VFS inodes reference their parent, so
+                            // children need to be freed first), but let's not crash in a `forget` function...
+                            debug_assert!(false, "children should be forgotten before parents");
+                            return;
+                        }
+                    };
+                    let mut parent_state = parent.inner.sync.write().unwrap();
+                    let InodeKindData::Directory {
+                        children,
+                        writing_children,
+                        ..
+                    } = &mut parent_state.kind_data
+                    else {
+                        unreachable!("parent is always a directory");
+                    };
+                    if let Some(child) = children.get(inode.name()) {
+                        // Don't accidentally remove a newer inode (e.g. remote shadowing local)
+                        if child.ino() == ino {
+                            children.remove(inode.name());
+                        }
+                    }
+                    writing_children.remove(&ino);
 
-            let inode = self.create_inode_locked(&parent_inode, &mut parent_state, &inode.name, InodeKind::File, state, false)?;
-            return Ok(inode);
+                    if let Ok(state) = inode.get_inode_state() {
+                        metrics::counter!("metadata_cache.inode_forgotten_before_expiry")
+                            .increment(state.stat.is_valid().into());
+                    };
+                    self.notifier.lock().unwrap().inval_entry(ROOT_INODE_NO, "testfile.txt");
+                }
+            }
         }
-        Err(InodeError::InodeDoesNotExist(ino))
     }
 
     /// Increase the lookup count of the given inode and
@@ -617,65 +638,7 @@ impl SuperblockInner {
     pub fn remember(&self, inode: &Inode) -> u64 {
         let lookup_count = inode.inc_lookup_count();
         if lookup_count == 1 {
-            let mut inodes = self.inodes.write().unwrap();
-            if inodes.len() > 100_000 {
-                loop {
-                    let to_remove = self.oldest_ino.fetch_add(1, Ordering::SeqCst);
-                    if let Some(inode) = inodes.get(&to_remove) {
-                        let inode = inode.clone();
-                        if inode.kind() == InodeKind::File {
-                            // let new_lookup_count = inode.dec_lookup_count(1);
-                            // if new_lookup_count == 0 {
-                                // Safe to remove, kernel no longer has a reference to it.
-                                let ino = inode.ino();
-
-                                let removed_inode = RemovedInode {
-                                    parent: inode.parent(),
-                                    name: inode.name().to_owned(),
-                                };
-                                self.removed_inodes.write().unwrap().insert(ino, removed_inode);
-                                inodes.remove(&ino);
-                                metrics::counter!("fs.removed_inodes").increment(1);
-                                tracing::info!("removing inode {} {}", ino, inode.name());
-
-                                let parent = {
-                                    if let Some(parent) = inodes.get(&inode.parent()).cloned() {
-                                        parent
-                                    } else {
-                                        // Should be impossible for this to fail (VFS inodes reference their parent, so
-                                        // children need to be freed first), but let's not crash in a `forget` function...
-                                        debug_assert!(false, "children should be forgotten before parents");
-                                        continue;
-                                    }
-                                };
-                                let mut parent_state = parent.inner.sync.write().unwrap();
-                                let InodeKindData::Directory {
-                                    children,
-                                    writing_children,
-                                    ..
-                                } = &mut parent_state.kind_data
-                                else {
-                                    unreachable!("parent is always a directory");
-                                };
-                                if let Some(child) = children.get(inode.name()) {
-                                    // Don't accidentally remove a newer inode (e.g. remote shadowing local)
-                                    if child.ino() == ino {
-                                        children.remove(inode.name());
-                                    }
-                                }
-                                writing_children.remove(&ino);
-
-                                if let Ok(state) = inode.get_inode_state() {
-                                    metrics::counter!("metadata_cache.inode_forgotten_before_expiry")
-                                        .increment(state.stat.is_valid().into());
-                                };
-                                break;
-                            // }
-                        }
-                    }
-                }
-            }
-            let previous = inodes.insert(inode.ino(), inode.clone());
+            let previous = self.inodes.write().unwrap().insert(inode.ino(), inode.clone());
             assert!(previous.is_none(), "inode numbers are never reused");
         }
         lookup_count
@@ -1757,7 +1720,7 @@ mod tests {
     use test_case::test_case;
     use time::{Duration, OffsetDateTime};
 
-    use crate::fs::{ToErrno, FUSE_ROOT_INODE};
+    use crate::{fs::{ToErrno, FUSE_ROOT_INODE}, fs_notifier::S3FilesystemNotifier};
 
     use super::*;
 
@@ -1809,7 +1772,7 @@ mod tests {
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
         let ts = OffsetDateTime::now_utc();
-        let superblock = Superblock::new(bucket, &prefix, Default::default());
+        let superblock = Superblock::new(bucket, &prefix, Default::default(), Default::default());
 
         // Try it twice to test the inode reuse path too
         for _ in 0..2 {
@@ -1929,6 +1892,7 @@ mod tests {
                 },
                 s3_personality: S3Personality::Standard,
             },
+            Default::default(),
         );
 
         let entries = ["file0.txt", "sdir0"];
@@ -1984,6 +1948,7 @@ mod tests {
                 },
                 s3_personality: S3Personality::Standard,
             },
+            Default::default(),
         );
 
         let entries = ["file0.txt", "sdir0"];
@@ -2021,7 +1986,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_forget() {
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
         let ino = 42;
         let inode_name = "made-up-inode";
         let inode = Inode::new(
@@ -2078,7 +2043,7 @@ mod tests {
         let name = "foo";
         client.add_object(name, b"foo".into());
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         let lookup = superblock.lookup(&client, ROOT_INODE_NO, name.as_ref()).await.unwrap();
         let lookup_count = lookup.inode.inner.sync.read().unwrap().lookup_count;
@@ -2117,7 +2082,7 @@ mod tests {
         let name = "foo";
         client.add_object(name, b"foo".into());
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         let lookup = superblock.lookup(&client, ROOT_INODE_NO, name.as_ref()).await.unwrap();
         let lookup_count = lookup.inode.inner.sync.read().unwrap().lookup_count;
@@ -2172,7 +2137,7 @@ mod tests {
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
         let ts = OffsetDateTime::now_utc();
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Try it all twice to test inode reuse
         for _ in 0..2 {
@@ -2224,7 +2189,7 @@ mod tests {
         let client = Arc::new(MockClient::new(client_config));
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         let mut expected_list = Vec::new();
 
@@ -2269,7 +2234,7 @@ mod tests {
         let client = Arc::new(MockClient::new(client_config));
 
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         let mut expected_list = Vec::new();
 
@@ -2324,7 +2289,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -2369,7 +2334,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -2425,6 +2390,7 @@ mod tests {
                 s3_personality,
                 ..Default::default()
             },
+            Default::default(),
         );
 
         // Here are the remote/local cases we want to test:
@@ -2536,7 +2502,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -2582,7 +2548,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create local directory
         let dirname = "local_dir";
@@ -2622,7 +2588,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         let file_name = "file.txt";
         let file_key = format!("{prefix}{file_name}");
@@ -2658,7 +2624,7 @@ mod tests {
         let file_name = "corrupted";
         client.add_object(file_name.as_ref(), MockObject::constant(0xaa, 30, ETag::for_tests()));
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         // Create an inode with "corrupted" metadata, i.e.
         // checksum not matching ino + full key.
@@ -2716,7 +2682,7 @@ mod tests {
             ..Default::default()
         };
         let client = Arc::new(MockClient::new(client_config));
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         let nested_dirs = (0..5).map(|i| format!("level{i}")).collect::<Vec<_>>();
         let leaf_dir_ino = {
@@ -2778,7 +2744,7 @@ mod tests {
         let client = Arc::new(MockClient::new(client_config));
         client.add_object("dir1/file1.txt", MockObject::constant(0xaa, 30, ETag::for_tests()));
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         for _ in 0..2 {
             let dir1_1 = superblock
@@ -2827,7 +2793,7 @@ mod tests {
             MockObject::constant(0xaa, 30, ETag::for_tests()),
         );
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         let dir_handle = superblock.readdir(&client, FUSE_ROOT_INODE, 2).await.unwrap();
         let entries = dir_handle.collect(&client).await.unwrap();
@@ -2875,7 +2841,7 @@ mod tests {
             MockObject::constant(0xaa, 30, ETag::from_str("test_etag_5").unwrap()),
         );
 
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
         let dir_handle = superblock.readdir(&client, FUSE_ROOT_INODE, 2).await.unwrap();
         let entries = dir_handle.collect(&client).await.unwrap();
         assert_eq!(
@@ -2912,7 +2878,7 @@ mod tests {
         };
         let client = Arc::new(MockClient::new(client_config));
         let prefix = Prefix::new(prefix).expect("valid prefix");
-        let superblock = Superblock::new("test_bucket", &prefix, Default::default());
+        let superblock = Superblock::new("test_bucket", &prefix, Default::default(), Default::default());
 
         // Create a new file
         let filename = "newfile.txt";
@@ -2969,7 +2935,7 @@ mod tests {
             ..Default::default()
         };
         let client = Arc::new(MockClient::new(client_config));
-        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default());
+        let superblock = Superblock::new("test_bucket", &Default::default(), Default::default(), Default::default());
 
         let ino: u64 = 42;
         let inode_name = "made-up-inode";

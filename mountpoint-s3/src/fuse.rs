@@ -4,18 +4,19 @@ use futures::executor::block_on;
 use mountpoint_s3_client::ObjectClient;
 use std::ffi::OsStr;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 use time::OffsetDateTime;
 use tracing::{field, instrument, Instrument};
 
 use crate::fs::{DirectoryEntry, DirectoryReplier, InodeNo, S3Filesystem, S3FilesystemConfig, ToErrno};
+use crate::fs_notifier::S3FilesystemNotifier;
 use crate::prefetch::Prefetch;
 use crate::prefix::Prefix;
 #[cfg(target_os = "macos")]
 use fuser::ReplyXTimes;
 use fuser::{
-    Filesystem, KernelConfig, ReplyAttr, ReplyBmap, ReplyCreate, ReplyData, ReplyEmpty, ReplyEntry, ReplyIoctl,
-    ReplyLock, ReplyLseek, ReplyOpen, ReplyWrite, ReplyXattr, Request, TimeOrNow,
+    Filesystem, KernelConfig, ReplyAttr, ReplyBmap, ReplyCreate, ReplyData, ReplyEmpty, ReplyEntry, ReplyIoctl, ReplyLock, ReplyLseek, ReplyOpen, ReplyWrite, ReplyXattr, Request, TimeOrNow
 };
 
 pub mod session;
@@ -82,8 +83,9 @@ where
         bucket: &str,
         prefix: &Prefix,
         config: S3FilesystemConfig,
+        notifier: Arc<Mutex<S3FilesystemNotifier>>,
     ) -> Self {
-        let fs = S3Filesystem::new(client, prefetcher, bucket, prefix, config);
+        let fs = S3Filesystem::new(client, prefetcher, bucket, prefix, config, notifier);
 
         Self { fs }
     }

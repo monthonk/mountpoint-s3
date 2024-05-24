@@ -292,6 +292,9 @@ pub struct CliArgs {
         value_name = "ALGORITHM",
     )]
     pub upload_checksums: Option<UploadChecksums>,
+
+    #[clap(long, help = "Enable read backpressure (experimental feature)", help_heading = MOUNT_OPTIONS_HEADER)]
+    pub read_backpressure: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -606,7 +609,8 @@ pub fn create_s3_client(args: &CliArgs) -> anyhow::Result<(S3CrtClient, EventLoo
         .auth_config(auth_config)
         .throughput_target_gbps(throughput_target_gbps)
         .part_size(args.part_size as usize)
-        .user_agent(user_agent);
+        .user_agent(user_agent)
+        .read_backpressure(args.read_backpressure);
     if args.requester_pays {
         client_config = client_config.request_payer("requester");
     }

@@ -52,6 +52,39 @@ async fn test_get_object(size: usize, range: Option<Range<u64>>) {
     check_get_result(result, range, expected).await;
 }
 
+// 32 MiB
+#[test_case(33554432, Some(16777216..33554432); "large object with large range")]
+#[tokio::test]
+async fn test_get_object_backpressure(size: usize, range: Option<Range<u64>>) {
+    let sdk_client = get_test_sdk_client().await;
+    let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object");
+
+    let key = format!("{prefix}/test");
+    let body = vec![0x42; size];
+    let mut request = sdk_client.put_object();
+    if cfg!(not(feature = "s3express_tests")) {
+        request = request.bucket(&bucket);
+    }
+    request
+        .key(&key)
+        .body(ByteStream::from(body.clone()))
+        .send()
+        .await
+        .unwrap();
+
+    let client: S3CrtClient = get_test_backpressure_client();
+
+    let result = client
+        .get_object(&bucket, &key, range.clone(), None)
+        .await
+        .expect("get_object should succeed");
+    let expected = match range {
+        Some(Range { start, end }) => &body[start as usize..end as usize],
+        None => &body,
+    };
+    check_get_result(result, range, expected).await;
+}
+
 #[tokio::test]
 async fn test_get_object_404_key() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_404_key");

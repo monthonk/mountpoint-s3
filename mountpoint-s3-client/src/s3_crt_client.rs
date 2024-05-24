@@ -90,6 +90,7 @@ pub struct S3ClientConfig {
     request_payer: Option<String>,
     bucket_owner: Option<String>,
     max_attempts: Option<NonZeroUsize>,
+    read_backpressure: bool,
 }
 
 impl Default for S3ClientConfig {
@@ -103,6 +104,7 @@ impl Default for S3ClientConfig {
             request_payer: None,
             bucket_owner: None,
             max_attempts: None,
+            read_backpressure: false,
         }
     }
 }
@@ -166,6 +168,13 @@ impl S3ClientConfig {
     #[must_use = "S3ClientConfig follows a builder pattern"]
     pub fn max_attempts(mut self, max_attempts: NonZeroUsize) -> Self {
         self.max_attempts = Some(max_attempts);
+        self
+    }
+
+    /// Set read backpressure
+    #[must_use = "S3ClientConfig follows a builder pattern"]
+    pub fn read_backpressure(mut self, read_backpressure: bool) -> Self {
+        self.read_backpressure = read_backpressure;
         self
     }
 }
@@ -304,6 +313,7 @@ impl S3CrtClientInner {
             None,
         );
         client_config.express_support(true);
+        client_config.read_backpressure(config.read_backpressure);
         client_config.signing_config(signing_config);
 
         client_config
@@ -514,8 +524,10 @@ impl S3CrtClientInner {
             .on_headers(move |headers, response_status| {
                 (on_headers)(headers, response_status);
             })
-            .on_body(move |range_start, data| {
+            .on_body(move |mut meta_request, range_start, data| {
                 let _guard = span_body.enter();
+                tracing::info!("on_body receiving data size={}", data.len());
+                meta_request.increase_window(64 * 1024 * 1024);
 
                 if first_body_part.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).ok() == Some(true) {
                     let latency = start_time.elapsed().as_micros() as f64;
@@ -530,6 +542,7 @@ impl S3CrtClientInner {
             })
             .on_finish(move |request_result| {
                 let _guard = span_finish.enter();
+                tracing::info!("on_finish");
 
                 let op = span_finish.metadata().map(|m| m.name()).unwrap_or("unknown");
                 let duration = start_time.elapsed();

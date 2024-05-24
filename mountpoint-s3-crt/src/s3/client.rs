@@ -102,6 +102,16 @@ impl ClientConfig {
         self
     }
 
+    /// Enable read backpressure
+    pub fn read_backpressure(&mut self, read_backpressure: bool) -> &mut Self {
+        self.inner.enable_read_backpressure = read_backpressure;
+        if read_backpressure {
+            // default value to 64 MiB
+            self.inner.initial_read_window = 64 * 1024 * 1024;
+        }
+        self
+    }
+
     /// Size in bytes of parts the files will be downloaded or uploaded in.
     ///
     /// The AWS CRT client may adjust this value per-request where possible
@@ -138,7 +148,7 @@ type TelemetryCallback = Box<dyn Fn(&RequestMetrics) + Send>;
 type HeadersCallback = Box<dyn FnMut(&Headers, i32) + Send>;
 
 /// Callback for when part of the response body is received. Given (range_start, data).
-type BodyCallback = Box<dyn FnMut(u64, &[u8]) + Send>;
+type BodyCallback = Box<dyn FnMut(MetaRequest, u64, &[u8]) + Send>;
 
 /// Callback for reviewing an upload before it completes.
 type UploadReviewCallback = Box<dyn FnOnce(UploadReview) -> bool + Send>;
@@ -329,7 +339,7 @@ impl MetaRequestOptions {
     }
 
     /// Provide a callback to run when the request's body arrives.
-    pub fn on_body(&mut self, callback: impl FnMut(u64, &[u8]) + Send + 'static) -> &mut Self {
+    pub fn on_body(&mut self, callback: impl FnMut(MetaRequest, u64, &[u8]) + Send + 'static) -> &mut Self {
         // SAFETY: we aren't moving out of the struct.
         let options = unsafe { Pin::get_unchecked_mut(Pin::as_mut(&mut self.0)) };
         options.on_body = Some(Box::new(callback));
@@ -450,7 +460,7 @@ unsafe extern "C" fn meta_request_headers_callback(
 
 /// SAFETY: Don't call this function directly, only called by the CRT as a callback.
 unsafe extern "C" fn meta_request_receive_body_callback(
-    _request: *mut aws_s3_meta_request,
+    request: *mut aws_s3_meta_request,
     body: *const aws_byte_cursor,
     range_start: u64,
     user_data: *mut libc::c_void,
@@ -460,8 +470,9 @@ unsafe extern "C" fn meta_request_receive_body_callback(
     let user_data = MetaRequestOptionsInner::from_user_data_ptr(user_data);
 
     if let Some(callback) = user_data.on_body.as_mut() {
+        let meta_request = request.into();
         let slice: &[u8] = aws_byte_cursor_as_slice(&*body);
-        callback(range_start, slice);
+        callback(meta_request, range_start, slice);
     }
 
     AWS_OP_SUCCESS
@@ -549,6 +560,21 @@ impl MetaRequest {
     /// will fail with an AWS_ERROR_INVALID_STATE error.
     pub fn write<'r, 's>(&'r mut self, slice: &'s [u8], eof: bool) -> MetaRequestWrite<'r, 's> {
         MetaRequestWrite::new(self, slice, eof)
+    }
+    
+    /// Increase window
+    pub fn increase_window(&mut self, bytes: u64) {
+        unsafe { aws_s3_meta_request_increment_read_window(self.inner.as_mut(), bytes) };
+    }
+}
+
+impl From<*mut aws_s3_meta_request> for MetaRequest {
+    // Convert a raw pointer to MetaRequest
+    fn from(value: *mut aws_s3_meta_request) -> Self {
+        unsafe {
+            aws_s3_meta_request_acquire(value);
+            MetaRequest { inner: NonNull::new_unchecked(value) }
+        }
     }
 }
 

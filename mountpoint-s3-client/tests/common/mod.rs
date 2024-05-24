@@ -68,7 +68,12 @@ pub fn get_test_client() -> S3CrtClient {
 
 pub fn get_test_backpressure_client() -> S3CrtClient {
     let endpoint_config = EndpointConfig::new(&get_test_region());
-    S3CrtClient::new(S3ClientConfig::new().endpoint_config(endpoint_config).read_backpressure(true)).expect("could not create test client")
+    S3CrtClient::new(
+        S3ClientConfig::new()
+            .endpoint_config(endpoint_config)
+            .read_backpressure(true),
+    )
+    .expect("could not create test client")
 }
 
 pub fn get_test_bucket_and_prefix(test_name: &str) -> (String, String) {
@@ -209,6 +214,7 @@ macro_rules! object_client_test {
                 let client = MockClient::new(MockClientConfig {
                     bucket: bucket.to_string(),
                     part_size: 1024,
+                    read_window: 1024,
                     unordered_list_seed: None,
                 });
 

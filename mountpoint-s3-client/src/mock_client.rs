@@ -60,6 +60,8 @@ pub struct MockClientConfig {
     pub bucket: String,
     /// The size of the parts that GetObject will respond with
     pub part_size: usize,
+    /// The size of read window
+    pub read_window: u64,
     /// A seed to randomize the order of ListObjectsV2 results, or None to use ordered list
     pub unordered_list_seed: Option<u64>,
 }
@@ -528,6 +530,10 @@ impl ObjectClient for MockClient {
         Some(self.config.part_size)
     }
 
+    fn read_window(&self) -> u64 {
+        self.config.read_window
+    }
+
     async fn delete_object(
         &self,
         bucket: &str,
@@ -885,6 +891,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -925,6 +932,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -981,6 +989,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -1069,6 +1078,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -1116,6 +1126,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: Some(1234),
         });
 
@@ -1189,6 +1200,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: Some(1234),
         });
 
@@ -1256,6 +1268,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: Some(1234),
         });
 
@@ -1322,6 +1335,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -1377,6 +1391,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: bucket.to_owned(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -1406,6 +1421,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: bucket.to_owned(),
             part_size: 1024,
+            read_window: 1024,
             unordered_list_seed: None,
         });
 
@@ -1442,6 +1458,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: bucket.to_owned(),
             part_size: PART_SIZE,
+            read_window: PART_SIZE,
             unordered_list_seed: None,
         });
 

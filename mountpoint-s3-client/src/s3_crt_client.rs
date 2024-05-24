@@ -91,6 +91,7 @@ pub struct S3ClientConfig {
     bucket_owner: Option<String>,
     max_attempts: Option<NonZeroUsize>,
     read_backpressure: bool,
+    initial_read_window: usize,
 }
 
 impl Default for S3ClientConfig {
@@ -105,6 +106,7 @@ impl Default for S3ClientConfig {
             bucket_owner: None,
             max_attempts: None,
             read_backpressure: false,
+            initial_read_window: 8 * 1024 * 1024,
         }
     }
 }
@@ -177,6 +179,13 @@ impl S3ClientConfig {
         self.read_backpressure = read_backpressure;
         self
     }
+
+    /// Set initial read window size
+    #[must_use = "S3ClientConfig follows a builder pattern"]
+    pub fn initial_read_window(mut self, initial_read_window: usize) -> Self {
+        self.initial_read_window = initial_read_window;
+        self
+    }
 }
 
 /// Authentication configuration for the CRT-based S3 client
@@ -238,6 +247,7 @@ struct S3CrtClientInner {
     user_agent_header: String,
     request_payer: Option<String>,
     part_size: usize,
+    read_window: u64,
     bucket_owner: Option<String>,
     credentials_provider: Option<CredentialsProvider>,
     host_resolver: HostResolver,
@@ -313,7 +323,7 @@ impl S3CrtClientInner {
             None,
         );
         client_config.express_support(true);
-        client_config.read_backpressure(config.read_backpressure);
+        client_config.read_backpressure(config.read_backpressure, config.initial_read_window);
         client_config.signing_config(signing_config);
 
         client_config
@@ -346,6 +356,7 @@ impl S3CrtClientInner {
             user_agent_header,
             request_payer: config.request_payer,
             part_size: config.part_size,
+            read_window: config.initial_read_window as u64,
             bucket_owner: config.bucket_owner,
             credentials_provider: Some(credentials_provider),
             host_resolver,
@@ -445,7 +456,7 @@ impl S3CrtClientInner {
         meta_request_type: MetaRequestType,
         request_span: Span,
         on_headers: impl FnMut(&Headers, i32) + Send + 'static,
-        on_body: impl FnMut(u64, &[u8]) + Send + 'static,
+        on_body: impl FnMut(MetaRequest, u64, &[u8]) + Send + 'static,
         on_finish: impl FnOnce(&MetaRequestResult) -> Result<T, Option<ObjectClientError<E, S3RequestError>>>
             + Send
             + 'static,
@@ -462,7 +473,7 @@ impl S3CrtClientInner {
         request_span: Span,
         on_request_finish: impl Fn(&RequestMetrics) + Send + 'static,
         mut on_headers: impl FnMut(&Headers, i32) + Send + 'static,
-        mut on_body: impl FnMut(u64, &[u8]) + Send + 'static,
+        mut on_body: impl FnMut(MetaRequest, u64, &[u8]) + Send + 'static,
         on_meta_request_finish: impl FnOnce(&MetaRequestResult) -> Result<T, Option<ObjectClientError<E, S3RequestError>>>
             + Send
             + 'static,
@@ -524,10 +535,8 @@ impl S3CrtClientInner {
             .on_headers(move |headers, response_status| {
                 (on_headers)(headers, response_status);
             })
-            .on_body(move |mut meta_request, range_start, data| {
+            .on_body(move |meta_request, range_start, data| {
                 let _guard = span_body.enter();
-                tracing::info!("on_body receiving data size={}", data.len());
-                meta_request.increase_window(64 * 1024 * 1024);
 
                 if first_body_part.compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst).ok() == Some(true) {
                     let latency = start_time.elapsed().as_micros() as f64;
@@ -538,11 +547,10 @@ impl S3CrtClientInner {
 
                 trace!(start = range_start, length = data.len(), "body part received");
 
-                (on_body)(range_start, data);
+                (on_body)(meta_request, range_start, data);
             })
             .on_finish(move |request_result| {
                 let _guard = span_finish.enter();
-                tracing::info!("on_finish");
 
                 let op = span_finish.metadata().map(|m| m.name()).unwrap_or("unknown");
                 let duration = start_time.elapsed();
@@ -671,7 +679,7 @@ impl S3CrtClientInner {
             request_span,
             on_request_finish,
             on_headers,
-            move |offset, data| {
+            move |_meta_request, offset, data| {
                 let mut body = body_clone.lock().unwrap();
                 assert_eq!(offset as usize, body.len());
                 body.extend_from_slice(data);
@@ -1035,6 +1043,10 @@ impl ObjectClient for S3CrtClient {
         Some(self.inner.part_size)
     }
 
+    fn read_window(&self) -> u64 {
+        self.inner.read_window
+    }
+
     async fn delete_object(
         &self,
         bucket: &str,
@@ -1052,7 +1064,7 @@ impl ObjectClient for S3CrtClient {
         // TODO: If more arguments are added to get object, make a request struct having those arguments
         // along with bucket and key.
     ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
-        self.get_object(bucket, key, range, if_match)
+        self.get_object(bucket, key, range, if_match, self.read_window())
     }
 
     async fn list_objects(

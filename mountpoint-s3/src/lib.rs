@@ -3,6 +3,7 @@ mod build_info;
 mod checksums;
 pub mod cli;
 pub mod data_cache;
+pub mod download;
 pub mod fs;
 pub mod fuse;
 mod inode;
@@ -12,6 +13,7 @@ mod object;
 pub mod prefetch;
 pub mod prefix;
 pub mod s3;
+pub mod resource_control;
 mod sync;
 mod upload;
 

@@ -10,8 +10,8 @@ pub mod s3;
 
 use fuser::{FileAttr, FileType};
 use futures::executor::ThreadPool;
+use mountpoint_s3::download::{backpressure_download, BackpressureDownload};
 use mountpoint_s3::fs::{DirectoryEntry, DirectoryReplier};
-use mountpoint_s3::prefetch::{default_prefetch, DefaultPrefetcher};
 use mountpoint_s3::prefix::Prefix;
 use mountpoint_s3::{S3Filesystem, S3FilesystemConfig};
 use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig};
@@ -21,7 +21,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::sync::Arc;
 
-pub type TestS3Filesystem<Client> = S3Filesystem<Client, DefaultPrefetcher<ThreadPool>>;
+pub type TestS3Filesystem<Client> = S3Filesystem<Client, BackpressureDownload<ThreadPool>>;
 
 pub fn make_test_filesystem(
     bucket: &str,
@@ -49,8 +49,8 @@ where
     Client: ObjectClient + Send + Sync + 'static,
 {
     let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-    let prefetcher = default_prefetch(runtime, Default::default());
-    S3Filesystem::new(client, prefetcher, bucket, prefix, config)
+    let downloader = backpressure_download(runtime);
+    S3Filesystem::new(client, downloader, bucket, prefix, config)
 }
 
 #[track_caller]

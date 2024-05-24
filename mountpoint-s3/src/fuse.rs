@@ -8,8 +8,8 @@ use std::time::SystemTime;
 use time::OffsetDateTime;
 use tracing::{field, instrument, Instrument};
 
+use crate::download::Download;
 use crate::fs::{DirectoryEntry, DirectoryReplier, InodeNo, S3Filesystem, S3FilesystemConfig, ToErrno};
-use crate::prefetch::Prefetch;
 use crate::prefix::Prefix;
 #[cfg(target_os = "macos")]
 use fuser::ReplyXTimes;
@@ -63,36 +63,36 @@ macro_rules! fuse_unsupported {
 
 /// This is just a thin wrapper around [S3Filesystem] that implements the actual `fuser` protocol,
 /// so that we can test our actual filesystem implementation without having actual FUSE in the loop.
-pub struct S3FuseFilesystem<Client, Prefetcher>
+pub struct S3FuseFilesystem<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
-    fs: S3Filesystem<Client, Prefetcher>,
+    fs: S3Filesystem<Client, Downloader>,
 }
 
-impl<Client, Prefetcher> S3FuseFilesystem<Client, Prefetcher>
+impl<Client, Downloader> S3FuseFilesystem<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     pub fn new(
         client: Client,
-        prefetcher: Prefetcher,
+        downloader: Downloader,
         bucket: &str,
         prefix: &Prefix,
         config: S3FilesystemConfig,
     ) -> Self {
-        let fs = S3Filesystem::new(client, prefetcher, bucket, prefix, config);
+        let fs = S3Filesystem::new(client, downloader, bucket, prefix, config);
 
         Self { fs }
     }
 }
 
-impl<Client, Prefetcher> Filesystem for S3FuseFilesystem<Client, Prefetcher>
+impl<Client, Downloader> Filesystem for S3FuseFilesystem<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     #[instrument(level="warn", skip_all, fields(req=_req.unique()))]
     fn init(&self, _req: &Request<'_>, config: &mut KernelConfig) -> Result<(), libc::c_int> {

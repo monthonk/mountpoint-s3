@@ -81,6 +81,10 @@ impl ObjectClient for ThroughputMockClient {
         self.inner.part_size()
     }
 
+    fn read_window(&self) -> u64 {
+        self.inner.read_window()
+    }
+
     async fn delete_object(
         &self,
         bucket: &str,
@@ -176,6 +180,7 @@ mod tests {
                     part_size: 8 * 1024 * 1024,
                     bucket: "test_bucket".to_owned(),
                     unordered_list_seed: None,
+                    ..Default::default()
                 };
                 let client = ThroughputMockClient::new(config, rate_gbps);
 

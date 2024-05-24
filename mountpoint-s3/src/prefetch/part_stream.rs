@@ -1,6 +1,7 @@
 use std::{fmt::Debug, ops::Range};
 
 use bytes::Bytes;
+use futures::stream::{AbortHandle, Abortable};
 use futures::task::SpawnExt;
 use futures::{pin_mut, task::Spawn, StreamExt};
 use mountpoint_s3_client::{types::ETag, ObjectClient};
@@ -239,9 +240,11 @@ where
             .instrument(span)
         };
 
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
+        let abortable = Abortable::new(task_handle, abort_registration);
 
-        RequestTask::from_handle(task_handle, size, start, part_queue)
+        RequestTask::from_handle(abort_handle, abortable, size, start, part_queue)
     }
 }
 

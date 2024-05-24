@@ -7,7 +7,7 @@ use crate::prefetch::PrefetchReadError;
 
 /// A single GetObject request submitted to the S3 client
 #[derive(Debug)]
-pub struct RequestTask<E: std::error::Error> {
+pub struct DownloadTask<E: std::error::Error> {
     /// Handle on the task/future. The future is cancelled when handle is dropped. This is None if
     /// the request is fake (created by seeking backwards in the stream)
     task_handle: Option<AbortHandle>,
@@ -18,7 +18,7 @@ pub struct RequestTask<E: std::error::Error> {
     part_queue: PartQueue<E>,
 }
 
-impl<E: std::error::Error + Send + Sync> RequestTask<E> {
+impl<E: std::error::Error + Send + Sync> DownloadTask<E> {
     pub fn from_handle(
         task_handle: AbortHandle,
         abortable: Abortable<RemoteHandle<()>>,
@@ -79,11 +79,6 @@ impl<E: std::error::Error + Send + Sync> RequestTask<E> {
 
     pub fn remaining(&self) -> usize {
         self.remaining
-    }
-
-    /// Maximum offset which data is known to be already in the `self.part_queue`
-    pub fn available_offset(&self) -> u64 {
-        self.start_offset + self.part_queue.bytes_received() as u64
     }
 
     /// Some requests aren't actually streaming data (they're fake, created by backwards seeks), and

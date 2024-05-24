@@ -27,11 +27,11 @@ use regex::Regex;
 
 use crate::build_info;
 use crate::data_cache::{CacheLimit, DiskDataCache, DiskDataCacheConfig, ManagedCacheDir};
+use crate::download::{Download, backpressure_download, caching_download};
 use crate::fs::{CacheConfig, S3FilesystemConfig, ServerSideEncryption, TimeToLive};
 use crate::fuse::session::FuseSession;
 use crate::fuse::S3FuseFilesystem;
 use crate::logging::{init_logging, LoggingConfig};
-use crate::prefetch::{caching_prefetch, default_prefetch, Prefetch};
 use crate::prefix::Prefix;
 use crate::s3::S3Personality;
 use crate::{autoconfigure, metrics};
@@ -295,9 +295,6 @@ pub struct CliArgs {
         value_name = "ALGORITHM",
     )]
     pub upload_checksums: Option<UploadChecksums>,
-
-    #[clap(long, help = "Enable read backpressure (experimental feature)", help_heading = MOUNT_OPTIONS_HEADER)]
-    pub read_backpressure: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -691,8 +688,6 @@ where
         filesystem_config.use_upload_checksums = false;
     }
 
-    let prefetcher_config = Default::default();
-
     let mut metadata_cache_ttl = args.metadata_ttl.unwrap_or_else(|| {
         if args.cache.is_some() {
             // When the data cache is enabled, use 1min as metadata-ttl.
@@ -734,10 +729,10 @@ where
             let managed_cache_dir =
                 ManagedCacheDir::new_from_parent(path).context("failed to create cache directory")?;
             let cache = DiskDataCache::new(managed_cache_dir.as_path_buf(), cache_config);
-            let prefetcher = caching_prefetch(cache, runtime, prefetcher_config);
+            let downloader = caching_download(cache, runtime);
             let mut fuse_session = create_filesystem(
                 client,
-                prefetcher,
+                downloader,
                 &args.bucket_name,
                 &args.prefix.unwrap_or_default(),
                 filesystem_config,
@@ -753,10 +748,10 @@ where
         }
     }
 
-    let prefetcher = default_prefetch(runtime, prefetcher_config);
+    let downloader = backpressure_download(runtime);
     create_filesystem(
         client,
-        prefetcher,
+        downloader,
         &args.bucket_name,
         &args.prefix.unwrap_or_default(),
         filesystem_config,
@@ -765,9 +760,9 @@ where
     )
 }
 
-fn create_filesystem<Client, Prefetcher>(
+fn create_filesystem<Client, Downloader>(
     client: Client,
-    prefetcher: Prefetcher,
+    downloader: Downloader,
     bucket_name: &str,
     prefix: &Prefix,
     filesystem_config: S3FilesystemConfig,
@@ -776,9 +771,9 @@ fn create_filesystem<Client, Prefetcher>(
 ) -> anyhow::Result<FuseSession>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch + Send + Sync + 'static,
+    Downloader: Download + Send + Sync + 'static,
 {
-    let fs = S3FuseFilesystem::new(client, prefetcher, bucket_name, prefix, filesystem_config);
+    let fs = S3FuseFilesystem::new(client, downloader, bucket_name, prefix, filesystem_config);
     let session = Session::new(fs, &fuse_session_config.mount_point, &fuse_session_config.options)
         .context("Failed to create FUSE session")?;
     let session = FuseSession::new(session, fuse_session_config.max_threads).context("Failed to start FUSE session")?;

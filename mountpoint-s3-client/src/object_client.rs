@@ -79,6 +79,9 @@ pub trait ObjectClient {
     /// can be `None` if the client does not do multi-part operations.
     fn part_size(&self) -> Option<usize>;
 
+    /// Query the read window size this client.
+    fn read_window(&self) -> u64;
+
     /// Delete a single object from the object store.
     ///
     /// DeleteObject will succeed even if the object within the bucket does not exist.

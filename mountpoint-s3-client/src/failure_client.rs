@@ -77,6 +77,10 @@ where
         self.client.part_size()
     }
 
+    fn read_window(&self) -> u64 {
+        self.client.read_window()
+    }
+
     async fn delete_object(
         &self,
         bucket: &str,
@@ -366,6 +370,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: bucket.to_string(),
             part_size: 128,
+            read_window: 128,
             unordered_list_seed: None,
         });
 

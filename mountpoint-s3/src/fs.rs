@@ -17,9 +17,10 @@ use mountpoint_s3_client::error::{GetObjectError, ObjectClientError};
 use mountpoint_s3_client::types::ETag;
 use mountpoint_s3_client::ObjectClient;
 
+use crate::download::Download;
 use crate::inode::{Inode, InodeError, InodeKind, LookedUp, ReaddirHandle, Superblock, SuperblockConfig, WriteHandle};
 use crate::logging;
-use crate::prefetch::{Prefetch, PrefetchReadError, PrefetchResult};
+use crate::prefetch::{PrefetchReadError, PrefetchResult};
 use crate::prefix::Prefix;
 use crate::s3::S3Personality;
 use crate::sync::atomic::{AtomicI64, AtomicU64, Ordering};
@@ -61,31 +62,31 @@ impl DirHandle {
 }
 
 #[derive(Debug)]
-struct FileHandle<Client, Prefetcher>
+struct FileHandle<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     inode: Inode,
     full_key: String,
-    state: AsyncMutex<FileHandleState<Client, Prefetcher>>,
+    state: AsyncMutex<FileHandleState<Client, Downloader>>,
 }
 
-enum FileHandleState<Client, Prefetcher>
+enum FileHandleState<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     /// The file handle has been assigned as a read handle
-    Read(Prefetcher::PrefetchResult<Client>),
+    Read(Downloader::DownloadResult<Client>),
     /// The file handle has been assigned as a write handle
     Write(UploadState<Client>),
 }
 
-impl<Client, Prefetcher> std::fmt::Debug for FileHandleState<Client, Prefetcher>
+impl<Client, Downloader> std::fmt::Debug for FileHandleState<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static + std::fmt::Debug,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -95,18 +96,18 @@ where
     }
 }
 
-impl<Client, Prefetcher> FileHandleState<Client, Prefetcher>
+impl<Client, Downloader> FileHandleState<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     async fn new_write_handle(
         lookup: &LookedUp,
         ino: InodeNo,
         flags: i32,
         pid: u32,
-        fs: &S3Filesystem<Client, Prefetcher>,
-    ) -> Result<FileHandleState<Client, Prefetcher>, Error> {
+        fs: &S3Filesystem<Client, Downloader>,
+    ) -> Result<FileHandleState<Client, Downloader>, Error> {
         let is_truncate = flags & libc::O_TRUNC != 0;
         let handle = fs
             .superblock
@@ -133,8 +134,8 @@ where
 
     async fn new_read_handle(
         lookup: &LookedUp,
-        fs: &S3Filesystem<Client, Prefetcher>,
-    ) -> Result<FileHandleState<Client, Prefetcher>, Error> {
+        fs: &S3Filesystem<Client, Downloader>,
+    ) -> Result<FileHandleState<Client, Downloader>, Error> {
         if !lookup.stat.is_readable {
             return Err(err!(
                 libc::EACCES,
@@ -149,8 +150,8 @@ where
             Some(etag) => ETag::from_str(etag).expect("E-Tag should be set"),
         };
         let request = fs
-            .prefetcher
-            .prefetch(fs.client.clone(), &fs.bucket, &full_key, object_size, etag.clone());
+            .downloader
+            .start(fs.client.clone(), &fs.bucket, &full_key, object_size, etag.clone());
         let handle = FileHandleState::Read(request);
         metrics::gauge!("fs.current_handles", "type" => "read").increment(1.0);
         Ok(handle)
@@ -511,32 +512,32 @@ pub enum SseCorruptedError {
 }
 
 #[derive(Debug)]
-pub struct S3Filesystem<Client, Prefetcher>
+pub struct S3Filesystem<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     config: S3FilesystemConfig,
     client: Arc<Client>,
     superblock: Superblock,
-    prefetcher: Prefetcher,
+    downloader: Downloader,
     uploader: Uploader<Client>,
     bucket: String,
     #[allow(unused)]
     prefix: Prefix,
     next_handle: AtomicU64,
     dir_handles: AsyncRwLock<HashMap<u64, Arc<DirHandle>>>,
-    file_handles: AsyncRwLock<HashMap<u64, Arc<FileHandle<Client, Prefetcher>>>>,
+    file_handles: AsyncRwLock<HashMap<u64, Arc<FileHandle<Client, Downloader>>>>,
 }
 
-impl<Client, Prefetcher> S3Filesystem<Client, Prefetcher>
+impl<Client, Downloader> S3Filesystem<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     pub fn new(
         client: Client,
-        prefetcher: Prefetcher,
+        downloader: Downloader,
         bucket: &str,
         prefix: &Prefix,
         config: S3FilesystemConfig,
@@ -562,7 +563,7 @@ where
             config,
             client,
             superblock,
-            prefetcher,
+            downloader,
             uploader,
             bucket: bucket.to_string(),
             prefix: prefix.clone(),
@@ -617,10 +618,10 @@ pub struct DirectoryEntry {
     lookup: LookedUp,
 }
 
-impl<Client, Prefetcher> S3Filesystem<Client, Prefetcher>
+impl<Client, Downloader> S3Filesystem<Client, Downloader>
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch,
+    Downloader: Download,
 {
     pub async fn init(&self, config: &mut KernelConfig) -> Result<(), libc::c_int> {
         let _ = config.add_capabilities(fuser::consts::FUSE_DO_READDIRPLUS);

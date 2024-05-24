@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use fuser::{BackgroundSession, MountOption, Session};
 use mountpoint_s3::data_cache::DataCache;
+use mountpoint_s3::download::Download;
 use mountpoint_s3::fuse::S3FuseFilesystem;
-use mountpoint_s3::prefetch::{Prefetch, PrefetcherConfig};
+use mountpoint_s3::prefetch::PrefetcherConfig;
 use mountpoint_s3::prefix::Prefix;
 use mountpoint_s3::S3FilesystemConfig;
 use mountpoint_s3_client::config::S3ClientAuthConfig;
@@ -80,9 +81,9 @@ impl TestSessionConfig {
     }
 }
 
-fn create_fuse_session<Client, Prefetcher>(
+fn create_fuse_session<Client, Downloader>(
     client: Client,
-    prefetcher: Prefetcher,
+    downloader: Downloader,
     bucket: &str,
     prefix: &str,
     mount_dir: &Path,
@@ -90,7 +91,7 @@ fn create_fuse_session<Client, Prefetcher>(
 ) -> BackgroundSession
 where
     Client: ObjectClient + Send + Sync + 'static,
-    Prefetcher: Prefetch + Send + Sync + 'static,
+    Downloader: Download + Send + Sync + 'static,
 {
     let options = vec![
         MountOption::DefaultPermissions,
@@ -101,7 +102,7 @@ where
 
     let prefix = Prefix::new(prefix).expect("valid prefix");
     let session = Session::new(
-        S3FuseFilesystem::new(client, prefetcher, bucket, &prefix, filesystem_config),
+        S3FuseFilesystem::new(client, downloader, bucket, &prefix, filesystem_config),
         mount_dir,
         &options,
     )
@@ -114,7 +115,7 @@ pub mod mock_session {
     use super::*;
 
     use futures::executor::ThreadPool;
-    use mountpoint_s3::prefetch::{caching_prefetch, default_prefetch};
+    use mountpoint_s3::download::{backpressure_download, caching_download};
     use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig, MockObject};
     use mountpoint_s3_client::types::ObjectAttribute;
 
@@ -137,10 +138,10 @@ pub mod mock_session {
         };
         let client = Arc::new(MockClient::new(client_config));
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let prefetcher = default_prefetch(runtime, test_config.prefetcher_config);
+        let downloader = backpressure_download(runtime);
         let session = create_fuse_session(
             client.clone(),
-            prefetcher,
+            downloader,
             BUCKET_NAME,
             &prefix,
             mount_dir.path(),
@@ -174,10 +175,10 @@ pub mod mock_session {
             };
             let client = Arc::new(MockClient::new(client_config));
             let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-            let prefetcher = caching_prefetch(cache, runtime, test_config.prefetcher_config);
+            let downloader = caching_download(cache, runtime);
             let session = create_fuse_session(
                 client.clone(),
-                prefetcher,
+                downloader,
                 BUCKET_NAME,
                 &prefix,
                 mount_dir.path(),
@@ -275,7 +276,7 @@ pub mod s3_session {
     use aws_sdk_s3::primitives::ByteStream;
     use aws_sdk_s3::types::{ChecksumAlgorithm, GlacierJobParameters, RestoreRequest, Tier};
     use aws_sdk_s3::Client;
-    use mountpoint_s3::prefetch::{caching_prefetch, default_prefetch};
+    use mountpoint_s3::download::{backpressure_download, caching_download};
     use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
     use mountpoint_s3_client::types::{Checksum, PutObjectTrailingChecksums};
     use mountpoint_s3_client::S3CrtClient;
@@ -295,10 +296,10 @@ pub mod s3_session {
             .auth_config(test_config.auth_config);
         let client = S3CrtClient::new(client_config).unwrap();
         let runtime = client.event_loop_group();
-        let prefetcher = default_prefetch(runtime, test_config.prefetcher_config);
+        let downloader = backpressure_download(runtime);
         let session = create_fuse_session(
             client,
-            prefetcher,
+            downloader,
             &bucket,
             &prefix,
             mount_dir.path(),
@@ -327,10 +328,10 @@ pub mod s3_session {
                 .endpoint_config(EndpointConfig::new(&region));
             let client = S3CrtClient::new(client_config).unwrap();
             let runtime = client.event_loop_group();
-            let prefetcher = caching_prefetch(cache, runtime, test_config.prefetcher_config);
+            let downloader = caching_download(cache, runtime);
             let session = create_fuse_session(
                 client,
-                prefetcher,
+                downloader,
                 &bucket,
                 &prefix,
                 mount_dir.path(),

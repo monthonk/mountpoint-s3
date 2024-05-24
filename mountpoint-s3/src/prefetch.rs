@@ -8,11 +8,11 @@
 //! non-sequential read, we abandon the prefetching and start again with the minimum request size.
 
 mod caching_stream;
-mod part;
-mod part_queue;
-mod part_stream;
+pub(crate) mod part;
+pub(crate) mod part_queue;
+pub mod part_stream;
 mod seek_window;
-mod task;
+pub(crate) mod task;
 
 use std::collections::VecDeque;
 use std::fmt::Debug;

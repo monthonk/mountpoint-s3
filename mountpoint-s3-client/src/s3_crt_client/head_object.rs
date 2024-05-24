@@ -143,7 +143,7 @@ impl S3CrtClient {
                         headers,
                     ));
                 },
-                |_, _| (),
+                |_, _, _| (),
                 move |result| {
                     if result.is_err() {
                         Err(parse_head_object_error(result).map(ObjectClientError::ServiceError))

@@ -45,6 +45,17 @@ pub fn unbounded_part_queue<E: std::error::Error>() -> (PartQueue<E>, PartQueueP
 }
 
 impl<E: std::error::Error + Send + Sync> PartQueue<E> {
+    pub async fn push_front(&mut self, mut part: Part) {
+        let mut current_part = self.current_part.lock().await;
+        match &mut *current_part {
+            Some(old_part) => {
+                part.extend(old_part).expect("part extend should succeed");
+                *current_part = Some(part)
+            }
+            None => *current_part = Some(part),
+        }
+    }
+
     /// Read up to `length` bytes from the queue at the current offset. This function always returns
     /// a contiguous [Bytes], and so may return fewer than `length` bytes if it would need to copy
     /// or reallocate to make the return value contiguous. This function blocks only if the queue is

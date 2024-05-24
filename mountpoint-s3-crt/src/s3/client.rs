@@ -103,11 +103,10 @@ impl ClientConfig {
     }
 
     /// Enable read backpressure
-    pub fn read_backpressure(&mut self, read_backpressure: bool) -> &mut Self {
+    pub fn read_backpressure(&mut self, read_backpressure: bool, initial_read_window: usize) -> &mut Self {
         self.inner.enable_read_backpressure = read_backpressure;
         if read_backpressure {
-            // default value to 64 MiB
-            self.inner.initial_read_window = 64 * 1024 * 1024;
+            self.inner.initial_read_window = initial_read_window;
         }
         self
     }
@@ -568,12 +567,17 @@ impl MetaRequest {
     }
 }
 
+// SAFETY: aws_s3_meta_request is thread-safe because it's a reference count.
+unsafe impl Send for MetaRequest {}
+
 impl From<*mut aws_s3_meta_request> for MetaRequest {
     // Convert a raw pointer to MetaRequest
     fn from(value: *mut aws_s3_meta_request) -> Self {
         unsafe {
             aws_s3_meta_request_acquire(value);
-            MetaRequest { inner: NonNull::new_unchecked(value) }
+            MetaRequest {
+                inner: NonNull::new_unchecked(value),
+            }
         }
     }
 }
@@ -602,7 +606,8 @@ unsafe impl Send for MetaRequest {}
 // SAFETY: `aws_s3_meta_request` is thread safe
 unsafe impl Sync for MetaRequest {}
 
-/// Future returned by `MetaRequest::write()`. Wraps `aws_s3_meta_request_poll_write`.
+/// Future returned by `MetaRequest::write()`. It will complete when the write completes,
+/// or cancel the meta-request if dropped.
 #[derive(Debug)]
 pub struct MetaRequestWrite<'r, 's> {
     /// The meta-request to write to.

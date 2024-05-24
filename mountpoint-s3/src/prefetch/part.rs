@@ -38,11 +38,35 @@ impl Part {
         }
     }
 
-    pub(super) fn len(&self) -> usize {
+    pub fn extend(&mut self, part: &Part) -> Result<(), PartMismatchError> {
+        if self.id != part.id {
+            return Err(PartMismatchError::Id {
+                actual: self.id.clone(),
+                requested: part.id.clone(),
+            });
+        }
+        let expected_offset = self.offset + self.checksummed_bytes.len() as u64;
+        if expected_offset != part.offset {
+            return Err(PartMismatchError::Offset {
+                actual: expected_offset,
+                requested: part.offset,
+            });
+        }
+        self.checksummed_bytes
+            .extend(part.checksummed_bytes.clone())
+            .expect("bytes extend should succeed");
+        Ok(())
+    }
+
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+
+    pub fn len(&self) -> usize {
         self.checksummed_bytes.len()
     }
 
-    pub(super) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.checksummed_bytes.is_empty()
     }
 

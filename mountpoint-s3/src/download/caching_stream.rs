@@ -13,9 +13,11 @@ use crate::data_cache::{BlockIndex, DataCache};
 use crate::object::ObjectId;
 use crate::prefetch::part::Part;
 use crate::prefetch::part_queue::{unbounded_part_queue, PartQueueProducer};
-use crate::prefetch::part_stream::{ObjectPartStream, RequestRange};
-use crate::prefetch::task::RequestTask;
+use crate::prefetch::part_stream::RequestRange;
 use crate::prefetch::PrefetchReadError;
+
+use super::part_stream::PartStream;
+use super::task::DownloadTask;
 
 /// [ObjectPartStream] implementation which maintains a [DataCache] for the object data
 /// retrieved by an [ObjectClient].
@@ -34,7 +36,7 @@ impl<Cache, Runtime> CachingPartStream<Cache, Runtime> {
     }
 }
 
-impl<Cache, Runtime> ObjectPartStream for CachingPartStream<Cache, Runtime>
+impl<Cache, Runtime> PartStream for CachingPartStream<Cache, Runtime>
 where
     Cache: DataCache + Send + Sync + 'static,
     Runtime: Spawn,
@@ -47,7 +49,7 @@ where
         if_match: ETag,
         range: RequestRange,
         _preferred_part_size: usize,
-    ) -> RequestTask<<Client as ObjectClient>::ClientError>
+    ) -> DownloadTask<<Client as ObjectClient>::ClientError>
     where
         Client: ObjectClient + Clone + Send + Sync + 'static,
     {
@@ -76,7 +78,7 @@ where
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
         let abortable = Abortable::new(task_handle, abort_registration);
 
-        RequestTask::from_handle(abort_handle, abortable, size, start, part_queue)
+        DownloadTask::from_handle(abort_handle, abortable, size, start, part_queue)
     }
 }
 
@@ -198,7 +200,6 @@ where
             match get_object_result.next().await {
                 Some(Ok((offset, body))) => {
                     trace!(offset, length = body.len(), "received GetObject part");
-                    metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
 
                     let expected_offset = block_offset + buffer.len() as u64;
                     if offset != expected_offset {
@@ -326,7 +327,7 @@ mod tests {
     use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig, MockObject, Operation};
     use test_case::test_case;
 
-    use crate::data_cache::InMemoryDataCache;
+    use crate::{data_cache::InMemoryDataCache, download::task::DownloadTask};
 
     use super::*;
 
@@ -423,7 +424,7 @@ mod tests {
     fn compare_read<E: std::error::Error + Send + Sync>(
         id: &ObjectId,
         object: &MockObject,
-        mut request_task: RequestTask<E>,
+        mut request_task: DownloadTask<E>,
     ) {
         let mut offset = request_task.start_offset();
         let mut remaining = request_task.total_size();

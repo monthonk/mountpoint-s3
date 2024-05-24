@@ -11,6 +11,7 @@ use mountpoint_s3_crt::common::error::Error;
 use mountpoint_s3_crt::http::request_response::Header;
 use mountpoint_s3_crt::s3::client::{MetaRequestResult, MetaRequestType};
 use pin_project::pin_project;
+use pin_project::pinned_drop;
 
 use crate::object_client::{ETag, GetBodyPart, GetObjectError, ObjectClientError, ObjectClientResult};
 use crate::s3_crt_client::{S3CrtClient, S3HttpRequest, S3RequestError};
@@ -24,6 +25,7 @@ impl S3CrtClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
+        initial_read_window: u64,
     ) -> Result<S3GetObjectRequest, ObjectClientError<GetObjectError, S3RequestError>> {
         let span = request_span!(self.inner, "get_object", bucket, key, ?range, ?if_match);
 
@@ -49,7 +51,7 @@ impl S3CrtClient {
         // requests. For auto-ranged-gets, the CRT takes care of adjusting the offset returned to
         // the body callback to include the range start, but for manual requests we need to do it
         // ourselves with `range_start`.
-        let (request_type, range_start) = if let Some(range) = range {
+        let (request_type, range_start, mut remaining) = if let Some(range) = range {
             // Range HTTP header is bounded below *inclusive*
             let range_value = format!("bytes={}-{}", range.start, range.end.saturating_sub(1));
             message
@@ -58,12 +60,12 @@ impl S3CrtClient {
 
             let length = range.end.saturating_sub(range.start);
             if length >= self.inner.part_size as u64 {
-                (MetaRequestType::GetObject, 0)
+                (MetaRequestType::GetObject, 0, Some(length))
             } else {
-                (MetaRequestType::Default, range.start)
+                (MetaRequestType::Default, range.start, Some(length))
             }
         } else {
-            (MetaRequestType::GetObject, 0)
+            (MetaRequestType::GetObject, 0, None)
         };
 
         let key = format!("/{key}");
@@ -72,16 +74,47 @@ impl S3CrtClient {
             .map_err(S3RequestError::construction_failure)?;
 
         let (sender, receiver) = futures::channel::mpsc::unbounded();
+        let mut read_window = if let Some(len) = remaining {
+            initial_read_window.min(len)
+        } else {
+            initial_read_window
+        };
 
         let request = self.inner.make_meta_request(
             message,
             request_type,
             span,
             |_, _| (),
-            move |offset, data| {
+            move |mut meta_request, offset, data| {
+                read_window -= data.len() as u64;
+                match remaining {
+                    Some(len) => {
+                        // Update remaining
+                        let next_remaining = len - data.len() as u64;
+                        tracing::info!("receiving {} bytes, remaining {} bytes", data.len(), next_remaining);
+                        remaining = Some(next_remaining);
+
+                        // Set current window to be within request boundary 
+                        // and less than half of the window is left
+                        if next_remaining > read_window {
+                            let to_increase = next_remaining.min(initial_read_window - read_window);
+                            tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
+                            meta_request.increase_window(to_increase);
+                            read_window += to_increase;
+                        }
+                    }
+                    None => {
+                        // No limit, we will download entire object
+                        let to_increase = initial_read_window - read_window;
+                        tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
+                        meta_request.increase_window(to_increase);
+                        read_window = initial_read_window;
+                    }
+                };
                 let _ = sender.unbounded_send(Ok((range_start + offset, data.into())));
             },
             move |result| {
+                tracing::info!("on_finish");
                 if result.is_err() {
                     Err(parse_get_object_error(result).map(ObjectClientError::ServiceError))
                 } else {
@@ -104,13 +137,21 @@ impl S3CrtClient {
 /// Each item of the stream is a part of the object body together with the part's offset within the
 /// object.
 #[derive(Debug)]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct S3GetObjectRequest {
     #[pin]
     request: S3HttpRequest<(), GetObjectError>,
     #[pin]
     finish_receiver: UnboundedReceiver<Result<GetBodyPart, Error>>,
     finished: bool,
+}
+
+/// Cancel the underlying meta request when [S3GetObjectRequest] is dropped.
+#[pinned_drop]
+impl PinnedDrop for S3GetObjectRequest {
+    fn drop(mut self: Pin<&mut Self>) {
+        self.request.meta_request.cancel();
+    }
 }
 
 impl Stream for S3GetObjectRequest {

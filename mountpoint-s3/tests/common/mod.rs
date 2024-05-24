@@ -13,13 +13,14 @@ use futures::executor::ThreadPool;
 use mountpoint_s3::download::{backpressure_download, BackpressureDownload};
 use mountpoint_s3::fs::{DirectoryEntry, DirectoryReplier};
 use mountpoint_s3::prefix::Prefix;
+use mountpoint_s3::resource_control::MemoryLimiter;
 use mountpoint_s3::{S3Filesystem, S3FilesystemConfig};
 use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig};
 use mountpoint_s3_client::ObjectClient;
 use mountpoint_s3_crt::common::rust_log_adapter::RustLogAdapter;
 use std::collections::VecDeque;
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub type TestS3Filesystem<Client> = S3Filesystem<Client, BackpressureDownload<ThreadPool>>;
 
@@ -48,8 +49,10 @@ pub fn make_test_filesystem_with_client<Client>(
 where
     Client: ObjectClient + Send + Sync + 'static,
 {
+    let memory_limit = 256 * 1024 * 1024;
+    let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
     let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-    let downloader = backpressure_download(runtime);
+    let downloader = backpressure_download(runtime, limiter, client.initial_read_window());
     S3Filesystem::new(client, downloader, bucket, prefix, config)
 }
 

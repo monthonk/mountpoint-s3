@@ -112,10 +112,12 @@ where
 }
 
 pub mod mock_session {
+    use std::sync::Mutex;
+
     use super::*;
 
     use futures::executor::ThreadPool;
-    use mountpoint_s3::download::{backpressure_download, caching_download};
+    use mountpoint_s3::{download::{backpressure_download, caching_download}, resource_control::MemoryLimiter};
     use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig, MockObject};
     use mountpoint_s3_client::types::ObjectAttribute;
 
@@ -137,8 +139,10 @@ pub mod mock_session {
             ..Default::default()
         };
         let client = Arc::new(MockClient::new(client_config));
+        let memory_limit = 256 * 1024 * 1024;
+        let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let downloader = backpressure_download(runtime);
+        let downloader = backpressure_download(runtime, limiter, client.initial_read_window());
         let session = create_fuse_session(
             client.clone(),
             downloader,
@@ -174,8 +178,10 @@ pub mod mock_session {
                 ..Default::default()
             };
             let client = Arc::new(MockClient::new(client_config));
+            let memory_limit = 256 * 1024 * 1024;
+            let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
             let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-            let downloader = caching_download(cache, runtime);
+            let downloader = caching_download(cache, limiter, runtime);
             let session = create_fuse_session(
                 client.clone(),
                 downloader,
@@ -270,6 +276,8 @@ pub mod mock_session {
 
 #[cfg(feature = "s3_tests")]
 pub mod s3_session {
+    use std::sync::Mutex;
+
     use super::*;
 
     use aws_sdk_s3::operation::head_object::HeadObjectError;
@@ -277,6 +285,7 @@ pub mod s3_session {
     use aws_sdk_s3::types::{ChecksumAlgorithm, GlacierJobParameters, RestoreRequest, Tier};
     use aws_sdk_s3::Client;
     use mountpoint_s3::download::{backpressure_download, caching_download};
+    use mountpoint_s3::resource_control::MemoryLimiter;
     use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
     use mountpoint_s3_client::types::{Checksum, PutObjectTrailingChecksums};
     use mountpoint_s3_client::S3CrtClient;
@@ -295,8 +304,10 @@ pub mod s3_session {
             .endpoint_config(EndpointConfig::new(&region))
             .auth_config(test_config.auth_config);
         let client = S3CrtClient::new(client_config).unwrap();
+        let memory_limit = 256 * 1024 * 1024;
+        let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
         let runtime = client.event_loop_group();
-        let downloader = backpressure_download(runtime);
+        let downloader = backpressure_download(runtime, limiter, client.initial_read_window());
         let session = create_fuse_session(
             client,
             downloader,
@@ -327,8 +338,10 @@ pub mod s3_session {
                 .part_size(test_config.part_size)
                 .endpoint_config(EndpointConfig::new(&region));
             let client = S3CrtClient::new(client_config).unwrap();
+            let memory_limit = 256 * 1024 * 1024;
+            let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
             let runtime = client.event_loop_group();
-            let downloader = caching_download(cache, runtime);
+            let downloader = caching_download(cache, limiter, runtime);
             let session = create_fuse_session(
                 client,
                 downloader,

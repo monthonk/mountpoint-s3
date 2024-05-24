@@ -74,8 +74,8 @@ where
         self.client.part_size()
     }
 
-    fn read_window(&self) -> u64 {
-        self.client.read_window()
+    fn initial_read_window(&self) -> u64 {
+        self.client.initial_read_window()
     }
 
     async fn delete_object(
@@ -185,8 +185,8 @@ where
 {
     type ClientError = Client::ClientError;
 
-    fn set_read_window(&mut self, size: u64) {
-        todo!()
+    fn set_read_window(&mut self, _size: u64) {
+        // TODO
     }
 }
 

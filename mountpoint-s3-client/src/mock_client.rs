@@ -492,8 +492,8 @@ impl GetObjectResult {
 impl GetObjectRequest for GetObjectResult {
     type ClientError = MockClientError;
 
-    fn set_read_window(&mut self, size: u64) {
-        todo!()
+    fn set_read_window(&mut self, _size: u64) {
+        // TODO
     }
 }
 
@@ -538,7 +538,7 @@ impl ObjectClient for MockClient {
         Some(self.config.part_size)
     }
 
-    fn read_window(&self) -> u64 {
+    fn initial_read_window(&self) -> u64 {
         self.config.read_window
     }
 

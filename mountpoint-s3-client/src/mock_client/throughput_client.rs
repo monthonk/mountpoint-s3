@@ -63,8 +63,8 @@ pub struct GetObjectResult {
 impl GetObjectRequest for GetObjectResult {
     type ClientError = MockClientError;
 
-    fn set_read_window(&mut self, size: u64) {
-        todo!()
+    fn set_read_window(&mut self, _size: u64) {
+        // TODO
     }
 }
 
@@ -87,8 +87,8 @@ impl ObjectClient for ThroughputMockClient {
         self.inner.part_size()
     }
 
-    fn read_window(&self) -> u64 {
-        self.inner.read_window()
+    fn initial_read_window(&self) -> u64 {
+        self.inner.initial_read_window()
     }
 
     async fn delete_object(

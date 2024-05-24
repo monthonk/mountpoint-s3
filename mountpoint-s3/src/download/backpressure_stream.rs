@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, sync::{Arc, Mutex}};
 
 use bytes::Bytes;
 use futures::{
@@ -13,7 +13,7 @@ use mountpoint_s3_client::GetObjectRequest;
 use crate::{
     checksums::ChecksummedBytes,
     object::ObjectId,
-    prefetch::{part::Part, part_queue::unbounded_part_queue, part_stream::RequestRange, PrefetchReadError},
+    prefetch::{part::Part, part_queue::unbounded_part_queue, part_stream::RequestRange, PrefetchReadError}, resource_control::MemoryLimiter,
 };
 
 use super::{part_stream::PartStream, task::DownloadTask};
@@ -22,14 +22,17 @@ use super::{part_stream::PartStream, task::DownloadTask};
 #[derive(Debug)]
 pub struct BackpressureStream<Runtime> {
     runtime: Runtime,
+    limiter: Arc<Mutex<MemoryLimiter>>,
+    read_window: Arc<Mutex<u64>>,
 }
 
 impl<Runtime> BackpressureStream<Runtime>
 where
     Runtime: Spawn,
 {
-    pub fn new(runtime: Runtime) -> Self {
-        Self { runtime }
+    pub fn new(runtime: Runtime, limiter: Arc<Mutex<MemoryLimiter>>, read_window: u64) -> Self {
+        let read_window = Arc::new(Mutex::new(read_window));
+        Self { runtime, limiter, read_window }
     }
 }
 
@@ -61,6 +64,8 @@ where
             let id = ObjectId::new(key.to_owned(), if_match);
             let span = debug_span!("prefetch", range=?range);
 
+            let limiter = self.limiter.clone();
+            let read_window = self.read_window.clone();
             async move {
                 let get_object_result = match client
                     .get_object(&bucket, id.key(), Some(range.into()), Some(id.etag().clone()))
@@ -79,11 +84,13 @@ where
                     match get_object_result.next().await {
                         Some(Ok((offset, body))) => {
                             trace!(offset, length = body.len(), "received GetObject part");
+                            limiter.lock().unwrap().reserve(body.len() as u64);
                             // we know this is safe because modifying a field doesn't move the whole struct
                             unsafe {
                                 let mut_ref = get_object_result.as_mut();
                                 let mut_pinned = Pin::get_unchecked_mut(mut_ref);
-                                mut_pinned.set_read_window(16 * 1024 * 1024);
+                                let window = limiter.lock().unwrap().get_read_window();
+                                mut_pinned.set_read_window(window);
                             }
                             // pre-split the body into multiple parts as suggested by preferred part size
                             // in order to avoid validating checksum on large parts at read.

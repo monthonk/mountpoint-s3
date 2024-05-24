@@ -5,6 +5,7 @@ use std::num::NonZeroUsize;
 use std::os::fd::AsRawFd;
 use std::os::unix::prelude::FromRawFd;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::{anyhow, Context as _};
@@ -34,6 +35,7 @@ use crate::fuse::S3FuseFilesystem;
 use crate::logging::{init_logging, LoggingConfig};
 use crate::prefix::Prefix;
 use crate::s3::S3Personality;
+use crate::resource_control::MemoryLimiter;
 use crate::{autoconfigure, metrics};
 
 const CLIENT_OPTIONS_HEADER: &str = "Client options";
@@ -714,6 +716,9 @@ where
     }
     filesystem_config.cache_config = CacheConfig::new(metadata_cache_ttl);
 
+    let memory_limit = 256 * 1024 * 1024;
+    let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
+
     if let Some(path) = args.cache {
         let cache_config = match args.max_cache_size {
             // Fallback to no data cache.
@@ -731,7 +736,7 @@ where
             let managed_cache_dir =
                 ManagedCacheDir::new_from_parent(path).context("failed to create cache directory")?;
             let cache = DiskDataCache::new(managed_cache_dir.as_path_buf(), cache_config);
-            let downloader = caching_download(cache, runtime);
+            let downloader = caching_download(cache, limiter, runtime);
             let mut fuse_session = create_filesystem(
                 client,
                 downloader,
@@ -750,7 +755,7 @@ where
         }
     }
 
-    let downloader = backpressure_download(runtime);
+    let downloader = backpressure_download(runtime, limiter, client.initial_read_window());
     create_filesystem(
         client,
         downloader,

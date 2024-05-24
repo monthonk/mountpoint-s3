@@ -80,7 +80,7 @@ pub trait ObjectClient {
     fn part_size(&self) -> Option<usize>;
 
     /// Query the read window size this client.
-    fn read_window(&self) -> u64;
+    fn initial_read_window(&self) -> u64;
 
     /// Delete a single object from the object store.
     ///

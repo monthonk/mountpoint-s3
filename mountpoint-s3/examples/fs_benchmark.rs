@@ -2,10 +2,12 @@ use clap::{Arg, ArgAction, Command};
 use fuser::{BackgroundSession, MountOption, Session};
 use mountpoint_s3::download::backpressure_download;
 use mountpoint_s3::fuse::S3FuseFilesystem;
+use mountpoint_s3::resource_control::MemoryLimiter;
 use mountpoint_s3::S3FilesystemConfig;
 use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
-use mountpoint_s3_client::S3CrtClient;
+use mountpoint_s3_client::{ObjectClient, S3CrtClient};
 use mountpoint_s3_crt::common::rust_log_adapter::RustLogAdapter;
+use std::sync::{Arc, Mutex};
 use std::{
     fs::{File, OpenOptions},
     io::{self, BufRead, BufReader},
@@ -164,7 +166,9 @@ fn mount_file_system(bucket_name: &str, region: &str, throughput_target_gbps: Op
         bucket_name,
         mountpoint.to_str().unwrap()
     );
-    let downloader = backpressure_download(runtime);
+    let memory_limit = 256 * 1024 * 1024;
+    let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
+    let downloader = backpressure_download(runtime, limiter, client.initial_read_window());
     let session = Session::new(
         S3FuseFilesystem::new(client, downloader, bucket_name, &Default::default(), filesystem_config),
         mountpoint,

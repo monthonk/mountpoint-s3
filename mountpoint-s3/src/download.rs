@@ -4,6 +4,8 @@ pub mod part_stream;
 mod seek_window;
 pub(crate) mod task;
 
+use std::sync::Mutex;
+
 use async_trait::async_trait;
 use futures::task::Spawn;
 use mountpoint_s3_client::types::ETag;
@@ -16,6 +18,7 @@ use crate::object::ObjectId;
 use crate::prefetch::part::Part;
 use crate::prefetch::part_stream::RequestRange;
 use crate::prefetch::{PrefetchReadError, PrefetchResult};
+use crate::resource_control::MemoryLimiter;
 use crate::sync::Arc;
 
 use self::backpressure_stream::BackpressureStream;
@@ -51,18 +54,18 @@ pub struct Downloader<Stream> {
 pub type BackpressureDownload<Runtime> = Downloader<BackpressureStream<Runtime>>;
 
 /// Creates an instance of a backpressure [Prefetch].
-pub fn backpressure_download<Runtime>(runtime: Runtime) -> BackpressureDownload<Runtime>
+pub fn backpressure_download<Runtime>(runtime: Runtime, limiter: Arc<Mutex<MemoryLimiter>>, read_window: u64) -> BackpressureDownload<Runtime>
 where
     Runtime: Spawn + Send + Sync + 'static,
 {
-    let part_stream = BackpressureStream::new(runtime);
+    let part_stream = BackpressureStream::new(runtime, limiter, read_window);
     Downloader::new(part_stream.into(), Default::default())
 }
 
 pub type CachingDownload<Cache, Runtime> = Downloader<CachingPartStream<Cache, Runtime>>;
 
 /// Creates an instance of a caching [Prefetch].
-pub fn caching_download<Cache, Runtime>(cache: Cache, runtime: Runtime) -> CachingDownload<Cache, Runtime>
+pub fn caching_download<Cache, Runtime>(cache: Cache, _limiter: Arc<Mutex<MemoryLimiter>>, runtime: Runtime) -> CachingDownload<Cache, Runtime>
 where
     Cache: DataCache + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync + 'static,

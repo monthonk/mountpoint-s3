@@ -1044,7 +1044,7 @@ impl ObjectClient for S3CrtClient {
         Some(self.inner.part_size)
     }
 
-    fn read_window(&self) -> u64 {
+    fn initial_read_window(&self) -> u64 {
         self.inner.read_window
     }
 
@@ -1065,7 +1065,7 @@ impl ObjectClient for S3CrtClient {
         // TODO: If more arguments are added to get object, make a request struct having those arguments
         // along with bucket and key.
     ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError> {
-        let initial_read_window = Mutex::new(ReadWindow::new(self.read_window()));
+        let initial_read_window = Mutex::new(ReadWindow::new(self.initial_read_window()));
         self.get_object(bucket, key, range, if_match, initial_read_window.into())
     }
 

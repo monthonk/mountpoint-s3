@@ -84,7 +84,8 @@ where
                     match get_object_result.next().await {
                         Some(Ok((offset, body))) => {
                             trace!(offset, length = body.len(), "received GetObject part");
-                            limiter.lock().unwrap().reserve(body.len() as u64);
+                            limiter.lock().unwrap().allocate(body.len() as u64);
+                            // metrics::increment_gauge!("x.prefetched_bytes", body.len() as f64, "type" => "s3");
                             // we know this is safe because modifying a field doesn't move the whole struct
                             unsafe {
                                 let mut_ref = get_object_result.as_mut();
@@ -127,6 +128,6 @@ where
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
         let abortable = Abortable::new(task_handle, abort_registration);
 
-        DownloadTask::from_handle(abort_handle, abortable, size, start, part_queue)
+        DownloadTask::from_handle(abort_handle, abortable, size, start, part_queue, self.limiter.clone())
     }
 }

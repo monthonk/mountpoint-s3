@@ -56,6 +56,28 @@ impl<E: std::error::Error + Send + Sync> PartQueue<E> {
         }
     }
 
+    pub async fn drain(self) -> usize {
+        let current_part = self.current_part.lock().await;
+        let cur_size = match current_part.as_ref() {
+            Some(part) => part.len(),
+            None => 0,
+        };
+        // close the channel and drain remaining parts
+        self.receiver.close();
+        let mut queue_size = 0;
+        loop {
+            if let Ok(part) = self.receiver.try_recv() {
+                if let Ok(part) = part {
+                    queue_size += part.len();
+                }
+            } else {
+                break;
+            }
+        }
+        tracing::info!("part queue left {}", queue_size);
+        cur_size + queue_size
+    }
+
     /// Read up to `length` bytes from the queue at the current offset. This function always returns
     /// a contiguous [Bytes], and so may return fewer than `length` bytes if it would need to copy
     /// or reallocate to make the return value contiguous. This function blocks only if the queue is

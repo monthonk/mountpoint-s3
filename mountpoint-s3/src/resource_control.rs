@@ -9,7 +9,7 @@ impl MemoryLimiter {
         Self { current: 0, limit }
     }
 
-    pub fn reserve(&mut self, size: u64) {
+    pub fn allocate(&mut self, size: u64) {
         self.current += size;
     }
 

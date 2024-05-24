@@ -1466,7 +1466,7 @@ mod tests {
         let client = MockClient::new(MockClientConfig {
             bucket: bucket.to_owned(),
             part_size: PART_SIZE,
-            read_window: PART_SIZE,
+            read_window: PART_SIZE as u64,
             unordered_list_seed: None,
         });
 

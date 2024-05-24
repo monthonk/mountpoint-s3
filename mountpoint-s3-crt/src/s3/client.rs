@@ -567,9 +567,6 @@ impl MetaRequest {
     }
 }
 
-// SAFETY: aws_s3_meta_request is thread-safe because it's a reference count.
-unsafe impl Send for MetaRequest {}
-
 impl From<*mut aws_s3_meta_request> for MetaRequest {
     // Convert a raw pointer to MetaRequest
     fn from(value: *mut aws_s3_meta_request) -> Self {

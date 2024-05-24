@@ -65,12 +65,12 @@ where
 pub type CachingDownload<Cache, Runtime> = Downloader<CachingPartStream<Cache, Runtime>>;
 
 /// Creates an instance of a caching [Prefetch].
-pub fn caching_download<Cache, Runtime>(cache: Cache, _limiter: Arc<Mutex<MemoryLimiter>>, runtime: Runtime) -> CachingDownload<Cache, Runtime>
+pub fn caching_download<Cache, Runtime>(cache: Cache, limiter: Arc<Mutex<MemoryLimiter>>, runtime: Runtime) -> CachingDownload<Cache, Runtime>
 where
     Cache: DataCache + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync + 'static,
 {
-    let part_stream = CachingPartStream::new(runtime, cache);
+    let part_stream = CachingPartStream::new(runtime, cache, limiter);
     Downloader::new(part_stream.into(), Default::default())
 }
 

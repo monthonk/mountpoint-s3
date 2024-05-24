@@ -95,7 +95,7 @@ impl S3CrtClient {
                 read_window -= data.len() as u64;
                 if let Some(rmn) = remaining {
                     let next_remaining = rmn - data.len() as u64;
-                    tracing::info!("receiving {} bytes, remaining {} bytes", data.len(), next_remaining);
+                    // tracing::info!("receiving {} bytes, remaining {} bytes", data.len(), next_remaining);
                     remaining = Some(next_remaining);
                 }
                 let next_target_window = target.lock().unwrap().target_read_window();
@@ -110,7 +110,7 @@ impl S3CrtClient {
                             next_target_window - read_window
                         }
                     };
-                    tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
+                    // tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
                     meta_request.increase_window(to_increase);
                     read_window = next_target_window;
                 }

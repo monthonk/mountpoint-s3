@@ -1280,8 +1280,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use super::*;
-    use crate::prefetch::default_prefetch;
+    use crate::{download::backpressure_download, resource_control::MemoryLimiter};
     use fuser::FileType;
     use futures::executor::ThreadPool;
     use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig, MockObject};
@@ -1358,14 +1360,16 @@ mod tests {
         client.add_object("dir1/file1.bin", MockObject::constant(0xa1, 15, ETag::for_tests()));
 
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let prefetcher = default_prefetch(runtime, Default::default());
+        let memory_limit = 256 * 1024 * 1024;
+        let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
+        let downloader = backpressure_download(runtime, limiter, client.initial_read_window());
         let server_side_encryption =
             ServerSideEncryption::new(Some("aws:kms".to_owned()), Some("some_key_alias".to_owned()));
         let fs_config = S3FilesystemConfig {
             server_side_encryption,
             ..Default::default()
         };
-        let mut fs = S3Filesystem::new(client, prefetcher, bucket, &Default::default(), fs_config);
+        let mut fs = S3Filesystem::new(client, downloader, bucket, &Default::default(), fs_config);
 
         // Lookup inode of the dir1 directory
         let entry = fs.lookup(FUSE_ROOT_INODE, "dir1".as_ref()).await.unwrap();

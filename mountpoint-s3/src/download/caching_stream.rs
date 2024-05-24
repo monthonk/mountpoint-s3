@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use std::time::Instant;
 use std::{ops::Range, sync::Arc};
 
@@ -15,6 +16,7 @@ use crate::prefetch::part::Part;
 use crate::prefetch::part_queue::{unbounded_part_queue, PartQueueProducer};
 use crate::prefetch::part_stream::RequestRange;
 use crate::prefetch::PrefetchReadError;
+use crate::resource_control::MemoryLimiter;
 
 use super::part_stream::PartStream;
 use super::task::DownloadTask;
@@ -25,13 +27,15 @@ use super::task::DownloadTask;
 pub struct CachingPartStream<Cache, Runtime> {
     cache: Arc<Cache>,
     runtime: Runtime,
+    limiter: Arc<Mutex<MemoryLimiter>>,
 }
 
 impl<Cache, Runtime> CachingPartStream<Cache, Runtime> {
-    pub fn new(runtime: Runtime, cache: Cache) -> Self {
+    pub fn new(runtime: Runtime, cache: Cache, limiter: Arc<Mutex<MemoryLimiter>>) -> Self {
         Self {
             cache: Arc::new(cache),
             runtime,
+            limiter,
         }
     }
 }
@@ -69,6 +73,7 @@ where
                 key.to_owned(),
                 if_match,
                 part_queue_producer,
+                self.limiter.clone(),
             );
             let span = debug_span!("prefetch", ?range);
             request.get_from_cache(range).instrument(span)
@@ -78,7 +83,7 @@ where
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
         let abortable = Abortable::new(task_handle, abort_registration);
 
-        DownloadTask::from_handle(abort_handle, abortable, size, start, part_queue)
+        DownloadTask::from_handle(abort_handle, abortable, size, start, part_queue, self.limiter.clone())
     }
 }
 
@@ -89,6 +94,7 @@ struct CachingRequest<Client: ObjectClient, Cache> {
     bucket: String,
     cache_key: ObjectId,
     part_queue_producer: PartQueueProducer<Client::ClientError>,
+    limiter: Arc<Mutex<MemoryLimiter>>,
 }
 
 impl<Client, Cache> CachingRequest<Client, Cache>
@@ -103,6 +109,7 @@ where
         key: String,
         etag: ETag,
         part_queue_producer: PartQueueProducer<Client::ClientError>,
+        limiter: Arc<Mutex<MemoryLimiter>>,
     ) -> Self {
         let cache_key = ObjectId::new(key, etag);
         Self {
@@ -111,6 +118,7 @@ where
             bucket,
             cache_key,
             part_queue_producer,
+            limiter,
         }
     }
 
@@ -130,6 +138,7 @@ where
                 Ok(Some(block)) => {
                     trace!(?cache_key, ?range, block_index, "cache hit");
                     let part = self.make_part(block, block_index, block_offset, &range);
+                    self.limiter.lock().unwrap().allocate(part.len() as u64);
                     self.part_queue_producer.push(Ok(part));
                     block_offset += block_size;
                     continue;
@@ -192,6 +201,7 @@ where
         let mut block_index = block_range.start;
         let mut block_offset = block_range.start * block_size;
         let mut buffer = ChecksummedBytes::default();
+        let limiter = self.limiter.clone();
         loop {
             assert!(
                 buffer.len() < block_size as usize,
@@ -228,6 +238,7 @@ where
 
                         // We have a full block: write it to the cache, send it to the queue, and flush the buffer.
                         self.update_cache(block_index, block_offset, &buffer);
+                        limiter.lock().unwrap().allocate(buffer.len() as u64);
                         self.part_queue_producer
                             .push(Ok(self.make_part(buffer, block_index, block_offset, &range)));
                         block_index += 1;
@@ -364,8 +375,10 @@ mod tests {
         let mock_client = Arc::new(MockClient::new(config));
         mock_client.add_object(key, object.clone());
 
+        let memory_limit = 256 * 1024 * 1024;
+        let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let stream = CachingPartStream::new(runtime, cache);
+        let stream = CachingPartStream::new(runtime, cache, limiter);
         let range = RequestRange::new(object_size, offset as u64, preferred_size);
 
         let first_read_count = {
@@ -409,8 +422,10 @@ mod tests {
         let mock_client = Arc::new(MockClient::new(config));
         mock_client.add_object(key, object.clone());
 
+        let memory_limit = 256 * 1024 * 1024;
+        let limiter = Arc::new(Mutex::new(MemoryLimiter::new(memory_limit)));
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let stream = CachingPartStream::new(runtime, cache);
+        let stream = CachingPartStream::new(runtime, cache, limiter);
 
         for offset in [0, 512 * KB, 1 * MB, 4 * MB, 9 * MB] {
             for preferred_size in [1 * KB, 512 * KB, 4 * MB, 12 * MB, 16 * MB] {

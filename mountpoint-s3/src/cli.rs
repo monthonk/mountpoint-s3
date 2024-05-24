@@ -137,6 +137,9 @@ pub struct CliArgs {
     )]
     pub allow_other: bool,
 
+    #[clap(long, help = "Enable read backpressure (experimental feature)", help_heading = MOUNT_OPTIONS_HEADER)]
+    pub read_backpressure: bool,
+
     #[clap(
         long,
         help = "Maximum throughput in Gbps [default: auto-detected on EC2 instances, 10 Gbps elsewhere]",

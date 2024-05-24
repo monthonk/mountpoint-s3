@@ -14,10 +14,7 @@ use futures::Stream;
 use pin_project::pin_project;
 
 use crate::object_client::{
-    DeleteObjectError, DeleteObjectResult, ETag, GetBodyPart, GetObjectAttributesError, GetObjectAttributesResult,
-    GetObjectError, HeadObjectError, HeadObjectResult, ListObjectsError, ListObjectsResult, ObjectAttribute,
-    ObjectClientError, ObjectClientResult, PutObjectError, PutObjectParams, PutObjectRequest, PutObjectResult,
-    UploadReview,
+    DeleteObjectError, DeleteObjectResult, ETag, GetBodyPart, GetObjectAttributesError, GetObjectAttributesResult, GetObjectError, GetObjectRequest, HeadObjectError, HeadObjectResult, ListObjectsError, ListObjectsResult, ObjectAttribute, ObjectClientError, ObjectClientResult, PutObjectError, PutObjectParams, PutObjectRequest, PutObjectResult, UploadReview
 };
 use crate::ObjectClient;
 
@@ -69,7 +66,7 @@ where
     State: Send + Sync + 'static,
     GetWrapperState: Send + Sync + 'static,
 {
-    type GetObjectResult = FailureGetResult<Client, GetWrapperState>;
+    type GetObjectRequest = FailureGetResult<Client, GetWrapperState>;
     type PutObjectRequest = FailurePutObjectRequest<Client, GetWrapperState>;
     type ClientError = Client::ClientError;
 
@@ -96,7 +93,7 @@ where
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-    ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
+    ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError> {
         let wrapper = (self.get_object_cb)(
             &mut *self.state.lock().unwrap(),
             bucket,
@@ -178,7 +175,19 @@ pub struct FailureGetResult<Client: ObjectClient, GetWrapperState> {
     state: GetWrapperState,
     result_fn: fn(&mut GetWrapperState) -> Result<(), Client::ClientError>,
     #[pin]
-    get_result: Client::GetObjectResult,
+    get_result: Client::GetObjectRequest,
+}
+
+impl<Client: ObjectClient, GetWrapperState> GetObjectRequest for FailureGetResult<Client, GetWrapperState>
+where
+    Client::PutObjectRequest: Send,
+    GetWrapperState: Send,
+{
+    type ClientError = Client::ClientError;
+
+    fn set_read_window(&mut self, size: u64) {
+        todo!()
+    }
 }
 
 impl<Client: ObjectClient, FailState> Stream for FailureGetResult<Client, FailState> {

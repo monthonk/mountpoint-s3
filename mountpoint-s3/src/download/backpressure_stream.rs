@@ -1,3 +1,5 @@
+use std::pin::Pin;
+
 use bytes::Bytes;
 use futures::{
     pin_mut,
@@ -6,6 +8,7 @@ use futures::{
     StreamExt,
 };
 use tracing::{debug_span, error, trace, Instrument};
+use mountpoint_s3_client::GetObjectRequest;
 
 use crate::{
     checksums::ChecksummedBytes,
@@ -76,6 +79,12 @@ where
                     match get_object_result.next().await {
                         Some(Ok((offset, body))) => {
                             trace!(offset, length = body.len(), "received GetObject part");
+                            // we know this is safe because modifying a field doesn't move the whole struct
+                            unsafe {
+                                let mut_ref = get_object_result.as_mut();
+                                let mut_pinned = Pin::get_unchecked_mut(mut_ref);
+                                mut_pinned.set_read_window(16 * 1024 * 1024);
+                            }
                             // pre-split the body into multiple parts as suggested by preferred part size
                             // in order to avoid validating checksum on large parts at read.
                             let mut body: Bytes = body.into();

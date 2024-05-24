@@ -3,6 +3,8 @@ use std::ops::Deref;
 use std::ops::Range;
 use std::os::unix::prelude::OsStrExt;
 use std::pin::Pin;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::task::{Context, Poll};
 
 use futures::channel::mpsc::UnboundedReceiver;
@@ -14,7 +16,10 @@ use pin_project::pin_project;
 use pin_project::pinned_drop;
 
 use crate::object_client::{ETag, GetBodyPart, GetObjectError, ObjectClientError, ObjectClientResult};
+use crate::read_window::ReadWindow;
 use crate::s3_crt_client::{S3CrtClient, S3HttpRequest, S3RequestError};
+
+use super::GetObjectRequest;
 
 impl S3CrtClient {
     /// Create and begin a new GetObject request. The returned [GetObjectRequest] is a [Stream] of
@@ -25,7 +30,7 @@ impl S3CrtClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-        initial_read_window: u64,
+        initial_read_window: Arc<Mutex<ReadWindow>>,
     ) -> Result<S3GetObjectRequest, ObjectClientError<GetObjectError, S3RequestError>> {
         let span = request_span!(self.inner, "get_object", bucket, key, ?range, ?if_match);
 
@@ -73,12 +78,13 @@ impl S3CrtClient {
             .set_request_path(key)
             .map_err(S3RequestError::construction_failure)?;
 
-        let (sender, receiver) = futures::channel::mpsc::unbounded();
+        let target = initial_read_window.clone();
         let mut read_window = if let Some(len) = remaining {
-            initial_read_window.min(len)
+            len.min(target.lock().unwrap().target_read_window())
         } else {
-            initial_read_window
+            target.lock().unwrap().target_read_window()
         };
+        let (sender, receiver) = futures::channel::mpsc::unbounded();
 
         let request = self.inner.make_meta_request(
             message,
@@ -87,30 +93,27 @@ impl S3CrtClient {
             |_, _| (),
             move |mut meta_request, offset, data| {
                 read_window -= data.len() as u64;
-                match remaining {
-                    Some(len) => {
-                        // Update remaining
-                        let next_remaining = len - data.len() as u64;
-                        tracing::info!("receiving {} bytes, remaining {} bytes", data.len(), next_remaining);
-                        remaining = Some(next_remaining);
-
-                        // Set current window to be within request boundary 
-                        // and less than half of the window is left
-                        if next_remaining > read_window {
-                            let to_increase = next_remaining.min(initial_read_window - read_window);
-                            tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
-                            meta_request.increase_window(to_increase);
-                            read_window += to_increase;
+                if let Some(rmn) = remaining {
+                    let next_remaining = rmn - data.len() as u64;
+                    tracing::info!("receiving {} bytes, remaining {} bytes", data.len(), next_remaining);
+                    remaining = Some(next_remaining);
+                }
+                let next_target_window = target.lock().unwrap().target_read_window();
+                if next_target_window > read_window {
+                    let to_increase = match remaining {
+                        Some(rmn) => {
+                            // Set current window to be within request boundary
+                            rmn.min(next_target_window - read_window)
                         }
-                    }
-                    None => {
-                        // No limit, we will download entire object
-                        let to_increase = initial_read_window - read_window;
-                        tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
-                        meta_request.increase_window(to_increase);
-                        read_window = initial_read_window;
-                    }
-                };
+                        None => {
+                            // No limit, we will download entire object
+                            next_target_window - read_window
+                        }
+                    };
+                    tracing::info!("current window {} bytes, increasing window size by {} bytes", read_window, to_increase);
+                    meta_request.increase_window(to_increase);
+                    read_window = next_target_window;
+                }
                 let _ = sender.unbounded_send(Ok((range_start + offset, data.into())));
             },
             move |result| {
@@ -127,6 +130,7 @@ impl S3CrtClient {
             request,
             finish_receiver: receiver,
             finished: false,
+            target_read_window: initial_read_window,
         })
     }
 }
@@ -144,6 +148,13 @@ pub struct S3GetObjectRequest {
     #[pin]
     finish_receiver: UnboundedReceiver<Result<GetBodyPart, Error>>,
     finished: bool,
+    target_read_window: Arc<Mutex<ReadWindow>>,
+}
+
+impl S3GetObjectRequest {
+    pub fn set_target(&mut self, target_read_window: u64) {
+        self.target_read_window.lock().unwrap().set_target(target_read_window);
+    }
 }
 
 /// Cancel the underlying meta request when [S3GetObjectRequest] is dropped.
@@ -151,6 +162,14 @@ pub struct S3GetObjectRequest {
 impl PinnedDrop for S3GetObjectRequest {
     fn drop(mut self: Pin<&mut Self>) {
         self.request.meta_request.cancel();
+    }
+}
+
+impl GetObjectRequest for S3GetObjectRequest {
+    type ClientError = S3RequestError;
+
+    fn set_read_window(&mut self, size: u64) {
+        self.target_read_window.lock().unwrap().set_target(size);
     }
 }
 

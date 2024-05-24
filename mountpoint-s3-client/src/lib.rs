@@ -53,11 +53,12 @@ pub mod instance_info;
 #[doc(hidden)]
 pub mod mock_client;
 mod object_client;
+mod read_window;
 mod s3_crt_client;
 #[doc(hidden)]
 pub mod user_agent;
 
-pub use object_client::{ObjectClient, PutObjectRequest};
+pub use object_client::{ObjectClient, GetObjectRequest, PutObjectRequest};
 
 pub use s3_crt_client::{get_object::S3GetObjectRequest, put_object::S3PutObjectRequest, S3CrtClient, S3RequestError};
 

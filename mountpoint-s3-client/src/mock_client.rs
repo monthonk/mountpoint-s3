@@ -29,6 +29,7 @@ use crate::object_client::{
     ObjectInfo, ObjectPart, PutObjectError, PutObjectParams, PutObjectRequest, PutObjectResult,
     PutObjectTrailingChecksums, RestoreStatus, UploadReview, UploadReviewPart,
 };
+use crate::GetObjectRequest;
 
 mod leaky_bucket;
 pub mod throughput_client;
@@ -465,7 +466,6 @@ impl std::fmt::Debug for MockObject {
             .finish()
     }
 }
-
 #[derive(Debug)]
 pub struct GetObjectResult {
     object: MockObject,
@@ -486,6 +486,14 @@ impl GetObjectResult {
             next_offset = Some(offset + part.len() as u64);
         }
         Ok(body.into_boxed_slice())
+    }
+}
+
+impl GetObjectRequest for GetObjectResult {
+    type ClientError = MockClientError;
+
+    fn set_read_window(&mut self, size: u64) {
+        todo!()
     }
 }
 
@@ -522,7 +530,7 @@ fn mock_client_error<T, E>(s: impl Into<Cow<'static, str>>) -> ObjectClientResul
 
 #[cfg_attr(not(docs_rs), async_trait)]
 impl ObjectClient for MockClient {
-    type GetObjectResult = GetObjectResult;
+    type GetObjectRequest = GetObjectResult;
     type PutObjectRequest = MockPutObjectRequest;
     type ClientError = MockClientError;
 
@@ -557,7 +565,7 @@ impl ObjectClient for MockClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-    ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
+    ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError> {
         trace!(bucket, key, ?range, ?if_match, "GetObject");
         self.inc_op_count(Operation::GetObject);
 

@@ -71,7 +71,7 @@ impl FromStr for ETag {
 #[cfg_attr(not(docs_rs), async_trait)]
 #[auto_impl(Arc)]
 pub trait ObjectClient {
-    type GetObjectResult: Stream<Item = ObjectClientResult<GetBodyPart, GetObjectError, Self::ClientError>> + Send;
+    type GetObjectRequest: GetObjectRequest<ClientError = Self::ClientError>;
     type PutObjectRequest: PutObjectRequest<ClientError = Self::ClientError>;
     type ClientError: std::error::Error + Send + Sync + 'static;
 
@@ -99,7 +99,7 @@ pub trait ObjectClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-    ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError>;
+    ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError>;
 
     /// List the objects in a bucket under a given prefix
     async fn list_objects(
@@ -336,6 +336,17 @@ pub type UploadReviewPart = mountpoint_s3_crt::s3::client::UploadReviewPart;
 
 /// A checksum algorithm used by the object client for integrity checks on uploads and downloads.
 pub type ChecksumAlgorithm = mountpoint_s3_crt::s3::client::ChecksumAlgorithm;
+
+/// A streaming response to a GetObject request.
+///
+/// This struct implements [`futures::Stream`], which you can use to read the body of the object.
+/// Each item of the stream is a part of the object body together with the part's offset within the
+/// object.
+pub trait GetObjectRequest: Stream<Item = ObjectClientResult<GetBodyPart, GetObjectError, Self::ClientError>> + Send {
+    type ClientError: std::error::Error + Send + Sync + 'static;
+
+    fn set_read_window(&mut self, size: u64);
+}
 
 /// A streaming put request which allows callers to asynchronously write the body of the request.
 ///

@@ -11,9 +11,7 @@ use pin_project::pin_project;
 use crate::mock_client::leaky_bucket::LeakyBucket;
 use crate::mock_client::{MockClient, MockClientConfig, MockClientError, MockObject, MockPutObjectRequest};
 use crate::object_client::{
-    DeleteObjectError, DeleteObjectResult, GetBodyPart, GetObjectAttributesError, GetObjectAttributesResult,
-    GetObjectError, HeadObjectError, HeadObjectResult, ListObjectsError, ListObjectsResult, ObjectAttribute,
-    ObjectClient, ObjectClientResult, PutObjectError, PutObjectParams,
+    DeleteObjectError, DeleteObjectResult, GetBodyPart, GetObjectAttributesError, GetObjectAttributesResult, GetObjectError, GetObjectRequest, HeadObjectError, HeadObjectResult, ListObjectsError, ListObjectsResult, ObjectAttribute, ObjectClient, ObjectClientResult, PutObjectError, PutObjectParams
 };
 use crate::types::ETag;
 
@@ -62,6 +60,14 @@ pub struct GetObjectResult {
     inner: BoxStream<'static, ObjectClientResult<GetBodyPart, GetObjectError, MockClientError>>,
 }
 
+impl GetObjectRequest for GetObjectResult {
+    type ClientError = MockClientError;
+
+    fn set_read_window(&mut self, size: u64) {
+        todo!()
+    }
+}
+
 impl Stream for GetObjectResult {
     type Item = ObjectClientResult<GetBodyPart, GetObjectError, MockClientError>;
 
@@ -73,7 +79,7 @@ impl Stream for GetObjectResult {
 
 #[async_trait]
 impl ObjectClient for ThroughputMockClient {
-    type GetObjectResult = GetObjectResult;
+    type GetObjectRequest = GetObjectResult;
     type PutObjectRequest = MockPutObjectRequest;
     type ClientError = MockClientError;
 
@@ -99,7 +105,7 @@ impl ObjectClient for ThroughputMockClient {
         key: &str,
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
-    ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
+    ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError> {
         let inner = self.inner.get_object(bucket, key, range, if_match).await?;
         let rate_limiter = self.rate_limiter.clone();
         let stream = inner.then(move |p| {

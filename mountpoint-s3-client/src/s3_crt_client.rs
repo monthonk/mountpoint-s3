@@ -40,6 +40,7 @@ use self::put_object::S3PutObjectRequest;
 use crate::endpoint_config::EndpointConfig;
 use crate::endpoint_config::EndpointError;
 use crate::object_client::*;
+use crate::read_window::ReadWindow;
 use crate::user_agent::UserAgent;
 
 macro_rules! request_span {
@@ -1032,7 +1033,7 @@ fn emit_throughput_metric(bytes: u64, duration: Duration, op: &'static str) {
 
 #[cfg_attr(not(docs_rs), async_trait)]
 impl ObjectClient for S3CrtClient {
-    type GetObjectResult = S3GetObjectRequest;
+    type GetObjectRequest = S3GetObjectRequest;
     type PutObjectRequest = S3PutObjectRequest;
     type ClientError = S3RequestError;
 
@@ -1063,8 +1064,9 @@ impl ObjectClient for S3CrtClient {
         if_match: Option<ETag>,
         // TODO: If more arguments are added to get object, make a request struct having those arguments
         // along with bucket and key.
-    ) -> ObjectClientResult<Self::GetObjectResult, GetObjectError, Self::ClientError> {
-        self.get_object(bucket, key, range, if_match, self.read_window())
+    ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError> {
+        let initial_read_window = Mutex::new(ReadWindow::new(self.read_window()));
+        self.get_object(bucket, key, range, if_match, initial_read_window.into())
     }
 
     async fn list_objects(

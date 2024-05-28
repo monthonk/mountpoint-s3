@@ -2,7 +2,7 @@ name: Integration tests
 
 on:
   push:
-    branches: [ "main", "wf-changes/**" ]
+    branches: [ "aws-c-io", "wf-changes/**" ]
   merge_group:
     types: [ "checks_requested" ]
 

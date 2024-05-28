@@ -80,7 +80,7 @@ jobs:
     - name: Build tests
       run: cargo test --features $RUST_FEATURES --no-run
     - name: Run tests
-      run: cargo test --features $RUST_FEATURES
+      run: RUST_LOG=debug,awscrt=debug cargo test --features $RUST_FEATURES
 
   s3express-test:
     name: S3 Express One Zone tests (${{ matrix.runner.name }}, FUSE ${{ matrix.fuseVersion }})
@@ -125,7 +125,7 @@ jobs:
     - name: Build tests
       run: cargo test --features '${{ env.RUST_FEATURES }},s3express_tests' --no-run
     - name: Run tests
-      run: cargo test --features '${{ env.RUST_FEATURES }},s3express_tests'
+      run: RUST_LOG=debug,awscrt=debug cargo test --features '${{ env.RUST_FEATURES }},s3express_tests'
 
   asan:
     name: Address sanitizer
@@ -162,4 +162,4 @@ jobs:
     - name: Validate ASan is working
       run: make test-asan-working
     - name: Run tests
-      run: make test-asan
+      run: RUST_LOG=debug,awscrt=debug make test-asan

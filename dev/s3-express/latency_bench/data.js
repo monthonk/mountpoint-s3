@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1717181792096,
+  "lastUpdate": 1717182376518,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -161,6 +161,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 115.3460207,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "036ed3bfeb2aec87de9b1717cfd63d4078d9c68f",
+          "message": "Save dump files to S3 when tests are failing (#893)\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2024-05-30T13:57:23Z",
+          "tree_id": "84385b2029ab90bbd49aa606ba04d31a2222e741",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/036ed3bfeb2aec87de9b1717cfd63d4078d9c68f"
+        },
+        "date": 1717182375598,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.341,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.832,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.859,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 11.904,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 133.13571629999998,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 108.2288279,
             "unit": "milliseconds"
           }
         ]

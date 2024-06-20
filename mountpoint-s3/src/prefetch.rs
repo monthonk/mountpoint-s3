@@ -81,22 +81,23 @@ pub enum PrefetchReadError<E> {
     Integrity(#[from] IntegrityError),
 }
 
-pub type DefaultPrefetcher<Runtime> = Prefetcher<ClientPartStream<Runtime>>;
+pub type DefaultPrefetcher<Runtime, Cache> = Prefetcher<ClientPartStream<Runtime>, Cache>;
 
 /// Creates an instance of the default [Prefetch].
-pub fn default_prefetch<Runtime>(runtime: Runtime, prefetcher_config: PrefetcherConfig) -> DefaultPrefetcher<Runtime>
+pub fn default_prefetch<Runtime, Cache>(runtime: Runtime, cache: Arc<Cache>, prefetcher_config: PrefetcherConfig) -> DefaultPrefetcher<Runtime, Cache>
 where
     Runtime: Spawn + Send + Sync + 'static,
+    Cache: DataCache + Send + Sync + 'static,
 {
     let part_stream = ClientPartStream::new(runtime);
-    Prefetcher::new(part_stream, prefetcher_config)
+    Prefetcher::new(part_stream, cache, prefetcher_config)
 }
 
-pub type CachingPrefetcher<Cache, Runtime> = Prefetcher<CachingPartStream<Cache, Runtime>>;
+pub type CachingPrefetcher<Cache, Runtime> = Prefetcher<CachingPartStream<Cache, Runtime>, Cache>;
 
 /// Creates an instance of a caching [Prefetch].
 pub fn caching_prefetch<Cache, Runtime>(
-    cache: Cache,
+    cache: Arc<Cache>,
     runtime: Runtime,
     prefetcher_config: PrefetcherConfig,
 ) -> CachingPrefetcher<Cache, Runtime>
@@ -104,8 +105,8 @@ where
     Cache: DataCache + Send + Sync + 'static,
     Runtime: Spawn + Send + Sync + 'static,
 {
-    let part_stream = CachingPartStream::new(runtime, cache);
-    Prefetcher::new(part_stream, prefetcher_config)
+    let part_stream = CachingPartStream::new(runtime, cache.clone());
+    Prefetcher::new(part_stream, cache, prefetcher_config)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -154,25 +155,32 @@ impl Default for PrefetcherConfig {
 
 /// A [Prefetcher] creates and manages prefetching GetObject requests to objects.
 #[derive(Debug)]
-pub struct Prefetcher<Stream> {
+pub struct Prefetcher<Stream, Cache> {
     part_stream: Arc<Stream>,
+    cache: Arc<Cache>,
     config: PrefetcherConfig,
 }
 
-impl<Stream> Prefetcher<Stream>
+impl<Stream, Cache> Prefetcher<Stream, Cache>
 where
     Stream: ObjectPartStream,
+    Cache: DataCache + Send + Sync,
 {
     /// Create a new [Prefetcher] from the given [ObjectPartStream] instance.
-    pub fn new(part_stream: Stream, config: PrefetcherConfig) -> Self {
+    pub fn new(part_stream: Stream, cache: Arc<Cache>, config: PrefetcherConfig) -> Self {
         let part_stream = Arc::new(part_stream);
-        Self { part_stream, config }
+        Self {
+            part_stream,
+            cache,
+            config,
+        }
     }
 }
 
-impl<Stream> Prefetch for Prefetcher<Stream>
+impl<Stream, Cache> Prefetch for Prefetcher<Stream, Cache>
 where
     Stream: ObjectPartStream + Send + Sync + 'static,
+    Cache: DataCache + Send + Sync,
 {
     type PrefetchResult<Client: ObjectClient + Send + Sync + 'static> = PrefetchGetObject<Stream, Client>;
 
@@ -593,18 +601,21 @@ mod tests {
         ClientPartStream::new(runtime)
     }
 
-    fn caching_stream(block_size: usize) -> CachingPartStream<InMemoryDataCache, ThreadPool> {
+    fn caching_stream(cache: Arc<InMemoryDataCache>) -> CachingPartStream<InMemoryDataCache, ThreadPool> {
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let cache = InMemoryDataCache::new(block_size as u64);
         CachingPartStream::new(runtime, cache)
     }
 
-    fn run_sequential_read_test<Stream: ObjectPartStream + Send + Sync + 'static>(
+    fn run_sequential_read_test<Stream, Cache>(
         part_stream: Stream,
+        cache: Arc<Cache>,
         size: u64,
         read_size: usize,
         test_config: TestConfig,
-    ) {
+    ) where
+        Stream: ObjectPartStream + Send + Sync + 'static,
+        Cache: DataCache + Send + Sync + 'static,
+    {
         let config = MockClientConfig {
             bucket: "test-bucket".to_string(),
             part_size: test_config.client_part_size,
@@ -625,7 +636,7 @@ mod tests {
             max_backward_seek_distance: test_config.max_backward_seek_distance,
         };
 
-        let prefetcher = Prefetcher::new(part_stream, prefetcher_config);
+        let prefetcher = Prefetcher::new(part_stream, cache, prefetcher_config);
         let mut request = prefetcher.prefetch(client, "test-bucket", "hello", size, etag);
 
         let mut next_offset = 0;
@@ -643,7 +654,7 @@ mod tests {
     }
 
     #[test_case(default_stream())]
-    #[test_case(caching_stream(1 * MB))]
+    #[test_case(caching_stream(InMemoryDataCache::new(1 * MB as u64).into()))]
     fn sequential_read_small<Stream>(part_stream: Stream)
     where
         Stream: ObjectPartStream + Send + Sync + 'static,
@@ -656,11 +667,13 @@ mod tests {
             max_forward_seek_wait_distance: 16 * 1024 * 1024,
             max_backward_seek_distance: 2 * 1024 * 1024,
         };
-        run_sequential_read_test(part_stream, 1024 * 1024 + 111, 1024 * 1024, config);
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
+        run_sequential_read_test(part_stream, cache, 1024 * 1024 + 111, 1024 * 1024, config);
     }
 
     #[test_case(default_stream())]
-    #[test_case(caching_stream(1 * MB))]
+    #[test_case(caching_stream(InMemoryDataCache::new(1 * MB as u64).into()))]
     fn sequential_read_medium<Stream>(part_stream: Stream)
     where
         Stream: ObjectPartStream + Send + Sync + 'static,
@@ -673,11 +686,14 @@ mod tests {
             max_forward_seek_wait_distance: 16 * 1024 * 1024,
             max_backward_seek_distance: 2 * 1024 * 1024,
         };
-        run_sequential_read_test(part_stream, 16 * 1024 * 1024 + 111, 1024 * 1024, config);
+
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
+        run_sequential_read_test(part_stream, cache, 16 * 1024 * 1024 + 111, 1024 * 1024, config);
     }
 
     #[test_case(default_stream())]
-    #[test_case(caching_stream(1 * MB))]
+    #[test_case(caching_stream(InMemoryDataCache::new(1 * MB as u64).into()))]
     fn sequential_read_large<Stream>(part_stream: Stream)
     where
         Stream: ObjectPartStream + Send + Sync + 'static,
@@ -691,7 +707,9 @@ mod tests {
             max_backward_seek_distance: 2 * 1024 * 1024,
         };
 
-        run_sequential_read_test(part_stream, 256 * 1024 * 1024 + 111, 1024 * 1024, config);
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
+        run_sequential_read_test(part_stream, cache, 256 * 1024 * 1024 + 111, 1024 * 1024, config);
     }
 
     fn fail_sequential_read_test<Stream: ObjectPartStream + Send + Sync + 'static>(
@@ -714,6 +732,8 @@ mod tests {
 
         let client = countdown_failure_client(client, get_failures, HashMap::new(), HashMap::new(), HashMap::new());
 
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
         let prefetcher_config = PrefetcherConfig {
             first_request_size: test_config.first_request_size,
             max_request_size: test_config.max_request_size,
@@ -721,7 +741,7 @@ mod tests {
             ..Default::default()
         };
 
-        let prefetcher = Prefetcher::new(part_stream, prefetcher_config);
+        let prefetcher = Prefetcher::new(part_stream, cache, prefetcher_config);
         let mut request = prefetcher.prefetch(Arc::new(client), "test-bucket", "hello", size, etag);
 
         let mut next_offset = 0;
@@ -743,10 +763,10 @@ mod tests {
     }
 
     #[test_case("invalid range; length=42", default_stream())]
-    #[test_case("invalid range; length=42", caching_stream(1 * MB))]
+    #[test_case("invalid range; length=42", caching_stream(InMemoryDataCache::new(1 * MB as u64).into()))]
     // test case for the request failure due to etag not matching
     #[test_case("At least one of the pre-conditions you specified did not hold", default_stream())]
-    #[test_case("At least one of the pre-conditions you specified did not hold", caching_stream(1 * MB))]
+    #[test_case("At least one of the pre-conditions you specified did not hold", caching_stream(InMemoryDataCache::new(1 * MB as u64).into()))]
     fn fail_request_sequential_small<Stream>(err_value: &str, part_stream: Stream)
     where
         Stream: ObjectPartStream + Send + Sync + 'static,
@@ -778,14 +798,18 @@ mod tests {
             read_size in 1usize..1 * 1024 * 1024,
             config: TestConfig,
         ) {
-            run_sequential_read_test(default_stream(), size, read_size, config);
+            let block_size = 1 * 1024;
+            let cache = InMemoryDataCache::new(block_size).into();
+            run_sequential_read_test(default_stream(), cache, size, read_size, config);
         }
 
         #[test]
         fn proptest_sequential_read_small_read_size(size in 1u64..1 * 1024 * 1024, read_factor in 1usize..10, config: TestConfig) {
             // Pick read size smaller than the object size
             let read_size = (size as usize / read_factor).max(1);
-            run_sequential_read_test(default_stream(), size, read_size, config);
+            let block_size = 1 * 1024;
+            let cache = InMemoryDataCache::new(block_size).into();
+            run_sequential_read_test(default_stream(), cache, size, read_size, config);
         }
 
         #[test]
@@ -795,7 +819,8 @@ mod tests {
             block_size in 16usize..1 * 1024 * 1024,
             config: TestConfig,
         ) {
-            run_sequential_read_test(caching_stream(block_size), size, read_size, config);
+            let cache = Arc::new(InMemoryDataCache::new(block_size as u64));
+            run_sequential_read_test(caching_stream(cache.clone()), cache, size, read_size, config);
         }
 
         #[test]
@@ -803,7 +828,8 @@ mod tests {
             block_size in 16usize..1 * 1024 * 1024, config: TestConfig) {
             // Pick read size smaller than the object size
             let read_size = (size as usize / read_factor).max(1);
-            run_sequential_read_test(caching_stream(block_size), size, read_size, config);
+            let cache = Arc::new(InMemoryDataCache::new(block_size as u64));
+            run_sequential_read_test(caching_stream(cache.clone()), cache, size, read_size, config);
         }
     }
 
@@ -819,7 +845,9 @@ mod tests {
             max_forward_seek_wait_distance: 1,
             max_backward_seek_distance: 18668,
         };
-        run_sequential_read_test(default_stream(), object_size, read_size, config);
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
+        run_sequential_read_test(default_stream(), cache, object_size, read_size, config);
     }
 
     fn run_random_read_test<Stream: ObjectPartStream + Send + Sync + 'static>(
@@ -839,6 +867,8 @@ mod tests {
 
         client.add_object("hello", object);
 
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
         let prefetcher_config = PrefetcherConfig {
             first_request_size: test_config.first_request_size,
             max_request_size: test_config.max_request_size,
@@ -848,7 +878,7 @@ mod tests {
             ..Default::default()
         };
 
-        let prefetcher = Prefetcher::new(part_stream, prefetcher_config);
+        let prefetcher = Prefetcher::new(part_stream, cache, prefetcher_config);
         let mut request = prefetcher.prefetch(client, "test-bucket", "hello", object_size, etag);
 
         for (offset, length) in reads {
@@ -903,7 +933,8 @@ mod tests {
             config: TestConfig,
         ) {
             let (object_size, reads) = reads;
-            run_random_read_test(caching_stream(block_size), object_size, reads, config);
+            let cache = InMemoryDataCache::new(block_size as u64).into();
+            run_random_read_test(caching_stream(cache), object_size, reads, config);
         }
     }
 
@@ -986,12 +1017,14 @@ mod tests {
 
         client.add_object("hello", object);
 
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
         let prefetcher_config = PrefetcherConfig {
             first_request_size: FIRST_REQUEST_SIZE,
             ..Default::default()
         };
 
-        let prefetcher = Prefetcher::new(default_stream(), prefetcher_config);
+        let prefetcher = Prefetcher::new(default_stream(), cache, prefetcher_config);
 
         // Try every possible seek from first_read_size
         for offset in first_read_size + 1..OBJECT_SIZE {
@@ -1025,11 +1058,13 @@ mod tests {
 
         client.add_object("hello", object);
 
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size).into();
         let prefetcher_config = PrefetcherConfig {
             first_request_size: FIRST_REQUEST_SIZE,
             ..Default::default()
         };
-        let prefetcher = Prefetcher::new(default_stream(), prefetcher_config);
+        let prefetcher = Prefetcher::new(default_stream(), cache, prefetcher_config);
 
         // Try every possible seek from first_read_size
         for offset in 0..first_read_size {
@@ -1082,6 +1117,8 @@ mod tests {
 
             client.add_object("hello", object);
 
+            let block_size = 1 * 1024;
+            let cache = InMemoryDataCache::new(block_size).into();
             let prefetcher_config = PrefetcherConfig {
                 first_request_size,
                 max_request_size,
@@ -1091,7 +1128,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let prefetcher = Prefetcher::new(ClientPartStream::new(ShuttleRuntime), prefetcher_config);
+            let prefetcher = Prefetcher::new(ClientPartStream::new(ShuttleRuntime), cache, prefetcher_config);
             let mut request = prefetcher.prefetch(client, "test-bucket", "hello", object_size, file_etag);
 
             let mut next_offset = 0;
@@ -1139,6 +1176,8 @@ mod tests {
 
             client.add_object("hello", object);
 
+            let block_size = 1 * 1024;
+            let cache = InMemoryDataCache::new(block_size).into();
             let prefetcher_config = PrefetcherConfig {
                 first_request_size,
                 max_request_size,
@@ -1148,7 +1187,7 @@ mod tests {
                 ..Default::default()
             };
 
-            let prefetcher = Prefetcher::new(ClientPartStream::new(ShuttleRuntime), prefetcher_config);
+            let prefetcher = Prefetcher::new(ClientPartStream::new(ShuttleRuntime), cache, prefetcher_config);
             let mut request = prefetcher.prefetch(client, "test-bucket", "hello", object_size, file_etag);
 
             let num_reads = rng.gen_range(10usize..50);

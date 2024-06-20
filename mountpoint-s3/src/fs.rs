@@ -1285,7 +1285,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::prefetch::default_prefetch;
+    use crate::{data_cache::InMemoryDataCache, prefetch::default_prefetch};
     use fuser::FileType;
     use futures::executor::ThreadPool;
     use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig, MockObject};
@@ -1362,7 +1362,9 @@ mod tests {
         client.add_object("dir1/file1.bin", MockObject::constant(0xa1, 15, ETag::for_tests()));
 
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let prefetcher = default_prefetch(runtime, Default::default());
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size as u64).into();
+        let prefetcher = default_prefetch(runtime, cache, Default::default());
         let server_side_encryption =
             ServerSideEncryption::new(Some("aws:kms".to_owned()), Some("some_key_alias".to_owned()));
         let fs_config = S3FilesystemConfig {

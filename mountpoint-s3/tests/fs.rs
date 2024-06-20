@@ -2,6 +2,7 @@
 
 use fuser::FileType;
 use libc::S_IFREG;
+use mountpoint_s3::data_cache::InMemoryDataCache;
 use mountpoint_s3::fs::{CacheConfig, ToErrno, FUSE_ROOT_INODE};
 use mountpoint_s3::prefix::Prefix;
 use mountpoint_s3::s3::S3Personality;
@@ -730,8 +731,11 @@ async fn test_upload_aborted_on_write_failure() {
         Default::default(),
         put_failures,
     );
+    let block_size = 1 * 1024;
+    let cache = InMemoryDataCache::new(block_size);
     let fs = make_test_filesystem_with_client(
         Arc::new(failure_client),
+        cache,
         BUCKET_NAME,
         &Default::default(),
         Default::default(),
@@ -807,8 +811,11 @@ async fn test_upload_aborted_on_fsync_failure() {
         Default::default(),
         put_failures,
     );
+    let block_size = 1 * 1024;
+    let cache = InMemoryDataCache::new(block_size);
     let fs = make_test_filesystem_with_client(
         Arc::new(failure_client),
+        cache,
         BUCKET_NAME,
         &Default::default(),
         Default::default(),
@@ -869,8 +876,11 @@ async fn test_upload_aborted_on_release_failure() {
         Default::default(),
         put_failures,
     );
+    let block_size = 1 * 1024;
+    let cache = InMemoryDataCache::new(block_size);
     let fs = make_test_filesystem_with_client(
         Arc::new(failure_client),
+        cache,
         BUCKET_NAME,
         &Default::default(),
         Default::default(),
@@ -1465,7 +1475,7 @@ async fn test_readdir_rewind_with_local_files_only() {
     assert_eq!(new_entries.len(), 3); // 1 new local file + 2 dirs (. and ..) = 3 entries
 }
 
-async fn new_local_file(fs: &TestS3Filesystem<Arc<MockClient>>, filename: &str) {
+async fn new_local_file(fs: &TestS3Filesystem<Arc<MockClient>, InMemoryDataCache>, filename: &str) {
     let mode = libc::S_IFREG | libc::S_IRWXU; // regular file + 0700 permissions
     let dentry = fs.mknod(FUSE_ROOT_INODE, filename.as_ref(), mode, 0, 0).await.unwrap();
     assert_eq!(dentry.attr.size, 0);
@@ -1484,7 +1494,7 @@ async fn new_local_file(fs: &TestS3Filesystem<Arc<MockClient>>, filename: &str) 
 }
 
 async fn ls(
-    fs: &TestS3Filesystem<Arc<MockClient>>,
+    fs: &TestS3Filesystem<Arc<MockClient>, InMemoryDataCache>,
     dir_handle: u64,
     offset: i64,
     max_entries: usize,

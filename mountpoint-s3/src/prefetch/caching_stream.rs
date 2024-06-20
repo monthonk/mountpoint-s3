@@ -25,9 +25,9 @@ pub struct CachingPartStream<Cache, Runtime> {
 }
 
 impl<Cache, Runtime> CachingPartStream<Cache, Runtime> {
-    pub fn new(runtime: Runtime, cache: Cache) -> Self {
+    pub fn new(runtime: Runtime, cache: Arc<Cache>) -> Self {
         Self {
-            cache: Arc::new(cache),
+            cache,
             runtime,
         }
     }
@@ -361,7 +361,7 @@ mod tests {
         mock_client.add_object(key, object.clone());
 
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let stream = CachingPartStream::new(runtime, cache);
+        let stream = CachingPartStream::new(runtime, cache.into());
         let range = RequestRange::new(object_size, offset as u64, preferred_size);
 
         let first_read_count = {
@@ -406,7 +406,7 @@ mod tests {
         mock_client.add_object(key, object.clone());
 
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let stream = CachingPartStream::new(runtime, cache);
+        let stream = CachingPartStream::new(runtime, cache.into());
 
         for offset in [0, 512 * KB, 1 * MB, 4 * MB, 9 * MB] {
             for preferred_size in [1 * KB, 512 * KB, 4 * MB, 12 * MB, 16 * MB] {

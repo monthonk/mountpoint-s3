@@ -7,6 +7,7 @@ use super::{BlockIndex, ChecksummedBytes, DataCache, DataCacheError, DataCacheRe
 use crate::object::ObjectId;
 use crate::sync::RwLock;
 
+#[derive(Debug)]
 /// Simple in-memory (RAM) implementation of [DataCache]. Recommended for use in testing only.
 pub struct InMemoryDataCache {
     data: RwLock<HashMap<ObjectId, HashMap<BlockIndex, ChecksummedBytes>>>,

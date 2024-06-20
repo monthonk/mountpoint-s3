@@ -1,5 +1,6 @@
 use clap::{Arg, ArgAction, Command};
 use fuser::{BackgroundSession, MountOption, Session};
+use mountpoint_s3::data_cache::InMemoryDataCache;
 use mountpoint_s3::fuse::S3FuseFilesystem;
 use mountpoint_s3::prefetch::default_prefetch;
 use mountpoint_s3::S3FilesystemConfig;
@@ -164,7 +165,10 @@ fn mount_file_system(bucket_name: &str, region: &str, throughput_target_gbps: Op
         bucket_name,
         mountpoint.to_str().unwrap()
     );
-    let prefetcher = default_prefetch(runtime, Default::default());
+
+    let block_size = 1 * 1024;
+    let cache = InMemoryDataCache::new(block_size as u64).into();
+    let prefetcher = default_prefetch(runtime, cache, Default::default());
     let session = Session::new(
         S3FuseFilesystem::new(client, prefetcher, bucket_name, &Default::default(), filesystem_config),
         mountpoint,

@@ -10,6 +10,7 @@ pub mod s3;
 
 use fuser::{FileAttr, FileType};
 use futures::executor::ThreadPool;
+use mountpoint_s3::data_cache::{DataCache, InMemoryDataCache};
 use mountpoint_s3::fs::{DirectoryEntry, DirectoryReplier};
 use mountpoint_s3::prefetch::{default_prefetch, DefaultPrefetcher};
 use mountpoint_s3::prefix::Prefix;
@@ -21,13 +22,13 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::sync::Arc;
 
-pub type TestS3Filesystem<Client> = S3Filesystem<Client, DefaultPrefetcher<ThreadPool>>;
+pub type TestS3Filesystem<Client, Cache> = S3Filesystem<Client, DefaultPrefetcher<ThreadPool, Cache>>;
 
 pub fn make_test_filesystem(
     bucket: &str,
     prefix: &Prefix,
     config: S3FilesystemConfig,
-) -> (Arc<MockClient>, TestS3Filesystem<Arc<MockClient>>) {
+) -> (Arc<MockClient>, TestS3Filesystem<Arc<MockClient>, InMemoryDataCache>) {
     let client_config = MockClientConfig {
         bucket: bucket.to_string(),
         part_size: 1024 * 1024,
@@ -35,21 +36,25 @@ pub fn make_test_filesystem(
     };
 
     let client = Arc::new(MockClient::new(client_config));
-    let fs = make_test_filesystem_with_client(client.clone(), bucket, prefix, config);
+    let block_size = 1 * 1024;
+    let cache = InMemoryDataCache::new(block_size as u64).into();
+    let fs = make_test_filesystem_with_client(client.clone(), cache, bucket, prefix, config);
     (client, fs)
 }
 
-pub fn make_test_filesystem_with_client<Client>(
+pub fn make_test_filesystem_with_client<Client, Cache>(
     client: Client,
+    cache: Cache,
     bucket: &str,
     prefix: &Prefix,
     config: S3FilesystemConfig,
-) -> TestS3Filesystem<Client>
+) -> TestS3Filesystem<Client, Cache>
 where
     Client: ObjectClient + Send + Sync + 'static,
+    Cache: DataCache + Send + Sync + 'static,
 {
     let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-    let prefetcher = default_prefetch(runtime, Default::default());
+    let prefetcher = default_prefetch(runtime, cache.into(), Default::default());
     S3Filesystem::new(client, prefetcher, bucket, prefix, config)
 }
 

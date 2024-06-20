@@ -114,6 +114,7 @@ pub mod mock_session {
     use super::*;
 
     use futures::executor::ThreadPool;
+    use mountpoint_s3::data_cache::InMemoryDataCache;
     use mountpoint_s3::prefetch::{caching_prefetch, default_prefetch};
     use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig, MockObject};
     use mountpoint_s3_client::types::ObjectAttribute;
@@ -137,7 +138,9 @@ pub mod mock_session {
         };
         let client = Arc::new(MockClient::new(client_config));
         let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-        let prefetcher = default_prefetch(runtime, test_config.prefetcher_config);
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size as u64).into();
+        let prefetcher = default_prefetch(runtime, cache, test_config.prefetcher_config);
         let session = create_fuse_session(
             client.clone(),
             prefetcher,
@@ -174,7 +177,7 @@ pub mod mock_session {
             };
             let client = Arc::new(MockClient::new(client_config));
             let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-            let prefetcher = caching_prefetch(cache, runtime, test_config.prefetcher_config);
+            let prefetcher = caching_prefetch(cache.into(), runtime, test_config.prefetcher_config);
             let session = create_fuse_session(
                 client.clone(),
                 prefetcher,
@@ -275,6 +278,7 @@ pub mod s3_session {
     use aws_sdk_s3::primitives::ByteStream;
     use aws_sdk_s3::types::{ChecksumAlgorithm, GlacierJobParameters, RestoreRequest, Tier};
     use aws_sdk_s3::Client;
+    use mountpoint_s3::data_cache::InMemoryDataCache;
     use mountpoint_s3::prefetch::{caching_prefetch, default_prefetch};
     use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
     use mountpoint_s3_client::types::{Checksum, PutObjectTrailingChecksums};
@@ -295,7 +299,9 @@ pub mod s3_session {
             .auth_config(test_config.auth_config);
         let client = S3CrtClient::new(client_config).unwrap();
         let runtime = client.event_loop_group();
-        let prefetcher = default_prefetch(runtime, test_config.prefetcher_config);
+        let block_size = 1 * 1024;
+        let cache = InMemoryDataCache::new(block_size as u64).into();
+        let prefetcher = default_prefetch(runtime, cache, test_config.prefetcher_config);
         let session = create_fuse_session(
             client,
             prefetcher,
@@ -327,7 +333,7 @@ pub mod s3_session {
                 .endpoint_config(EndpointConfig::new(&region));
             let client = S3CrtClient::new(client_config).unwrap();
             let runtime = client.event_loop_group();
-            let prefetcher = caching_prefetch(cache, runtime, test_config.prefetcher_config);
+            let prefetcher = caching_prefetch(cache.into(), runtime, test_config.prefetcher_config);
             let session = create_fuse_session(
                 client,
                 prefetcher,

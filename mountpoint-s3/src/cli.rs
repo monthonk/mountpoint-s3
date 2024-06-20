@@ -26,7 +26,7 @@ use nix::unistd::ForkResult;
 use regex::Regex;
 
 use crate::build_info;
-use crate::data_cache::{CacheLimit, DiskDataCache, DiskDataCacheConfig, ManagedCacheDir};
+use crate::data_cache::{CacheLimit, DiskDataCache, DiskDataCacheConfig, InMemoryDataCache, ManagedCacheDir};
 use crate::fs::{CacheConfig, S3FilesystemConfig, ServerSideEncryption, TimeToLive};
 use crate::fuse::session::FuseSession;
 use crate::fuse::S3FuseFilesystem;
@@ -735,7 +735,7 @@ where
         if let Some(cache_config) = cache_config {
             let managed_cache_dir =
                 ManagedCacheDir::new_from_parent(path).context("failed to create cache directory")?;
-            let cache = DiskDataCache::new(managed_cache_dir.as_path_buf(), cache_config);
+            let cache = DiskDataCache::new(managed_cache_dir.as_path_buf(), cache_config).into();
             let prefetcher = caching_prefetch(cache, runtime, prefetcher_config);
             let mut fuse_session = create_filesystem(
                 client,
@@ -755,7 +755,9 @@ where
         }
     }
 
-    let prefetcher = default_prefetch(runtime, prefetcher_config);
+    let block_size = 1 * 1024;
+    let cache = InMemoryDataCache::new(block_size as u64).into();
+    let prefetcher = default_prefetch(runtime, cache, prefetcher_config);
     create_filesystem(
         client,
         prefetcher,

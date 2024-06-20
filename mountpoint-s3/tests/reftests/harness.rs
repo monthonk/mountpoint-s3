@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use fuser::FileType;
 use futures::future::{BoxFuture, FutureExt};
+use mountpoint_s3::data_cache::InMemoryDataCache;
 use mountpoint_s3::fs::{CacheConfig, InodeNo, ToErrno, FUSE_ROOT_INODE};
 use mountpoint_s3::prefix::Prefix;
 use mountpoint_s3::S3FilesystemConfig;
@@ -163,7 +164,7 @@ impl InflightWrites {
 pub struct Harness {
     readdir_limit: usize, // max number of entries that a readdir will return; 0 means no limit
     reference: Reference,
-    fs: TestS3Filesystem<Arc<MockClient>>,
+    fs: TestS3Filesystem<Arc<MockClient>, InMemoryDataCache>,
     client: Arc<MockClient>,
     bucket: String,
     inflight_writes: InflightWrites,
@@ -172,7 +173,7 @@ pub struct Harness {
 impl Harness {
     /// Create a new test harness
     pub fn new(
-        fs: TestS3Filesystem<Arc<MockClient>>,
+        fs: TestS3Filesystem<Arc<MockClient>, InMemoryDataCache>,
         client: Arc<MockClient>,
         reference: Reference,
         bucket: &str,

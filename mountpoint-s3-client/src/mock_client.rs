@@ -63,7 +63,7 @@ pub struct MockClientConfig {
     /// A seed to randomize the order of ListObjectsV2 results, or None to use ordered list
     pub unordered_list_seed: Option<u64>,
     /// A flag to enable backpressure read
-    pub enable_back_pressure: bool,
+    pub enable_backpressure: bool,
     /// Initial backpressure read window size, ignored if enable_back_pressure is false
     pub initial_read_window_size: usize,
 }
@@ -474,7 +474,7 @@ pub struct MockGetObjectRequest {
     next_offset: u64,
     length: usize,
     part_size: usize,
-    enable_back_pressure: bool,
+    enable_backpressure: bool,
     current_window_size: usize,
 }
 
@@ -499,6 +499,10 @@ impl GetObjectRequest for MockGetObjectRequest {
     fn increment_read_window(mut self: Pin<&mut Self>, len: usize) {
         self.current_window_size += len;
     }
+
+    fn remaining_window_size(self: Pin<&Self>) -> usize {
+        self.current_window_size
+    }
 }
 
 impl Stream for MockGetObjectRequest {
@@ -512,7 +516,7 @@ impl Stream for MockGetObjectRequest {
         let mut next_read_size = self.part_size.min(self.length);
 
         // Simulate backpressure mechanism
-        if self.enable_back_pressure {
+        if self.enable_backpressure {
             if self.current_window_size == 0 {
                 return Poll::Pending;
             }
@@ -551,6 +555,14 @@ impl ObjectClient for MockClient {
         Some(self.config.part_size)
     }
 
+    fn initial_read_window_size(&self) -> Option<usize> {
+        if self.config.enable_backpressure {
+            Some(self.config.initial_read_window_size)
+        } else {
+            None
+        }
+    }
+
     async fn delete_object(
         &self,
         bucket: &str,
@@ -575,7 +587,15 @@ impl ObjectClient for MockClient {
         range: Option<Range<u64>>,
         if_match: Option<ETag>,
     ) -> ObjectClientResult<Self::GetObjectRequest, GetObjectError, Self::ClientError> {
-        trace!(bucket, key, ?range, ?if_match, "GetObject");
+        trace!(
+            bucket,
+            key,
+            ?range,
+            ?if_match,
+            enable_back_pressure = self.config.enable_backpressure,
+            initial_read_window_size = self.config.initial_read_window_size,
+            "GetObject"
+        );
         self.inc_op_count(Operation::GetObject);
 
         if bucket != self.config.bucket {
@@ -605,7 +625,7 @@ impl ObjectClient for MockClient {
                 next_offset,
                 length,
                 part_size: self.config.part_size,
-                enable_back_pressure: self.config.enable_back_pressure,
+                enable_backpressure: self.config.enable_backpressure,
                 current_window_size: self.config.initial_read_window_size,
             })
         } else {
@@ -960,7 +980,7 @@ mod tests {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
             unordered_list_seed: None,
-            enable_back_pressure: true,
+            enable_backpressure: true,
             initial_read_window_size: backpressure_read_window_size,
         });
 
@@ -1069,7 +1089,7 @@ mod tests {
             bucket: "test_bucket".to_string(),
             part_size: 1024,
             unordered_list_seed: None,
-            enable_back_pressure: true,
+            enable_backpressure: true,
             initial_read_window_size: 256,
         });
 

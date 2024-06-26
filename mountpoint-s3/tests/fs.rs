@@ -716,6 +716,8 @@ async fn test_upload_aborted_on_write_failure() {
     let client_config = MockClientConfig {
         bucket: BUCKET_NAME.to_string(),
         part_size: 1024 * 1024,
+        enable_backpressure: true,
+        initial_read_window_size: 1024 * 1024,
         ..Default::default()
     };
 
@@ -793,6 +795,8 @@ async fn test_upload_aborted_on_fsync_failure() {
     let client_config = MockClientConfig {
         bucket: BUCKET_NAME.to_string(),
         part_size: 1024 * 1024,
+        enable_backpressure: true,
+        initial_read_window_size: 1024 * 1024,
         ..Default::default()
     };
 
@@ -855,6 +859,8 @@ async fn test_upload_aborted_on_release_failure() {
     let client_config = MockClientConfig {
         bucket: BUCKET_NAME.to_string(),
         part_size: 1024 * 1024,
+        enable_backpressure: true,
+        initial_read_window_size: 1024 * 1024,
         ..Default::default()
     };
 

@@ -11,7 +11,7 @@ pub mod s3;
 use fuser::{FileAttr, FileType};
 use futures::executor::ThreadPool;
 use mountpoint_s3::fs::{DirectoryEntry, DirectoryReplier};
-use mountpoint_s3::prefetch::{default_prefetch, DefaultPrefetcher};
+use mountpoint_s3::prefetch::{default_prefetch, DefaultPrefetcher, PrefetcherConfig};
 use mountpoint_s3::prefix::Prefix;
 use mountpoint_s3::{S3Filesystem, S3FilesystemConfig};
 use mountpoint_s3_client::mock_client::{MockClient, MockClientConfig};
@@ -31,6 +31,8 @@ pub fn make_test_filesystem(
     let client_config = MockClientConfig {
         bucket: bucket.to_string(),
         part_size: 1024 * 1024,
+        enable_backpressure: true,
+        initial_read_window_size: 1024 * 1024,
         ..Default::default()
     };
 
@@ -49,7 +51,8 @@ where
     Client: ObjectClient + Send + Sync + 'static,
 {
     let runtime = ThreadPool::builder().pool_size(1).create().unwrap();
-    let prefetcher = default_prefetch(runtime, Default::default());
+    let prefetcher_config = PrefetcherConfig::new(&client);
+    let prefetcher = default_prefetch(runtime, prefetcher_config);
     S3Filesystem::new(client, prefetcher, bucket, prefix, config)
 }
 

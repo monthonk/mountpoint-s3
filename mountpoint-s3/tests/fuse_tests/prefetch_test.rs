@@ -1,6 +1,5 @@
 use fuser::BackgroundSession;
 use mountpoint_s3::data_cache::InMemoryDataCache;
-use mountpoint_s3::prefetch::PrefetcherConfig;
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use tempfile::TempDir;
@@ -76,15 +75,10 @@ where
 {
     const OBJECT_SIZE: usize = 1024 * 1024;
 
-    let prefetcher_config = PrefetcherConfig {
-        first_request_size: request_size,
-        ..Default::default()
-    };
-
     let (mount_point, _session, mut test_client) = creator_fn(
         prefix,
         TestSessionConfig {
-            prefetcher_config,
+            initial_read_window_size: request_size,
             ..Default::default()
         },
     );

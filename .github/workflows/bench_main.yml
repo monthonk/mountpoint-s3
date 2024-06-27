@@ -2,7 +2,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [ "main", "wf-changes/**" ]
+    branches: [ "ci-test", "wf-changes/**" ]
 
 permissions:
   id-token: write

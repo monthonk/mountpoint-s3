@@ -3,6 +3,9 @@ use std::ops::Deref;
 use std::ops::Range;
 use std::os::unix::prelude::OsStrExt;
 use std::pin::Pin;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::channel::mpsc::UnboundedReceiver;
@@ -60,6 +63,8 @@ impl S3CrtClient {
             .map_err(S3RequestError::construction_failure)?;
 
         let (sender, receiver) = futures::channel::mpsc::unbounded();
+        let remaining_window = Arc::new(AtomicUsize::new(self.inner.initial_read_window_size));
+        let remaining_window_clone = remaining_window.clone();
 
         let request = self.inner.make_meta_request(
             message,
@@ -67,6 +72,7 @@ impl S3CrtClient {
             span,
             |_, _| (),
             move |offset, data| {
+                remaining_window_clone.fetch_sub(data.len(), Ordering::SeqCst);
                 let _ = sender.unbounded_send(Ok((offset, data.into())));
             },
             move |result| {
@@ -82,6 +88,7 @@ impl S3CrtClient {
             request,
             finish_receiver: receiver,
             finished: false,
+            remaining_window,
         })
     }
 }
@@ -99,6 +106,7 @@ pub struct S3GetObjectRequest {
     #[pin]
     finish_receiver: UnboundedReceiver<Result<GetBodyPart, Error>>,
     finished: bool,
+    remaining_window: Arc<AtomicUsize>,
 }
 
 impl GetObjectRequest for S3GetObjectRequest {
@@ -106,6 +114,11 @@ impl GetObjectRequest for S3GetObjectRequest {
 
     fn increment_read_window(mut self: Pin<&mut Self>, len: usize) {
         self.request.meta_request.increment_read_window(len as u64);
+        self.remaining_window.fetch_add(len, Ordering::SeqCst);
+    }
+
+    fn remaining_window_size(self: Pin<&Self>) -> usize {
+        self.remaining_window.load(Ordering::SeqCst)
     }
 }
 

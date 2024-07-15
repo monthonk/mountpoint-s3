@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1720188045395,
+  "lastUpdate": 1721075712739,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -971,6 +971,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 112.716998,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ac6c1770cec5ee7c0fd2ee009b87b9fdddea2af0",
+          "message": "Update CRT submodules to latest releases (#940)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-07-12T09:55:22Z",
+          "tree_id": "fe8a91bcf90942bdbe5e5ce66e8d1cb507cc8f00",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/ac6c1770cec5ee7c0fd2ee009b87b9fdddea2af0"
+        },
+        "date": 1721075711803,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.284,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.561,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.659,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 12.22,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 115.01675440000001,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 82.1444678,
             "unit": "milliseconds"
           }
         ]

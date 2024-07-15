@@ -44,13 +44,16 @@ impl S3CrtClient {
                 .map_err(S3RequestError::construction_failure)?;
         }
 
-        if let Some(range) = range {
+        let next_offset = if let Some(range) = range {
             // Range HTTP header is bounded below *inclusive*
             let range_value = format!("bytes={}-{}", range.start, range.end.saturating_sub(1));
             message
                 .set_header(&Header::new("Range", range_value))
                 .map_err(S3RequestError::construction_failure)?;
-        }
+            range.start
+        } else {
+            0
+        };
 
         let key = format!("/{key}");
         message
@@ -58,6 +61,7 @@ impl S3CrtClient {
             .map_err(S3RequestError::construction_failure)?;
 
         let (sender, receiver) = futures::channel::mpsc::unbounded();
+        let read_window_range = next_offset + self.inner.initial_read_window_size as u64;
 
         let request = self.inner.make_meta_request(
             message,
@@ -80,6 +84,9 @@ impl S3CrtClient {
             request,
             finish_receiver: receiver,
             finished: false,
+            enable_backpressure: self.inner.enable_backpressure,
+            next_offset,
+            read_window_range,
         })
     }
 }
@@ -97,13 +104,21 @@ pub struct S3GetObjectRequest {
     #[pin]
     finish_receiver: UnboundedReceiver<Result<GetBodyPart, Error>>,
     finished: bool,
+    enable_backpressure: bool,
+    next_offset: u64,
+    read_window_range: u64,
 }
 
 impl GetObjectRequest for S3GetObjectRequest {
     type ClientError = S3RequestError;
 
     fn increment_read_window(mut self: Pin<&mut Self>, len: usize) {
+        self.read_window_range += len as u64;
         self.request.meta_request.increment_read_window(len as u64);
+    }
+
+    fn read_window_range(self: Pin<&Self>) -> u64 {
+        self.read_window_range
     }
 }
 
@@ -117,20 +132,34 @@ impl Stream for S3GetObjectRequest {
 
         let this = self.project();
 
-        if let Poll::Ready(Some(val)) = this.finish_receiver.poll_next(cx) {
-            return Poll::Ready(Some(val.map_err(|e| ObjectClientError::ClientError(e.into()))));
-        }
-
-        match this.request.poll(cx) {
-            Poll::Ready(Ok(_)) => {
-                *this.finished = true;
-                Poll::Ready(None)
-            }
-            Poll::Ready(Err(e)) => {
-                *this.finished = true;
-                Poll::Ready(Some(Err(e)))
-            }
-            Poll::Pending => Poll::Pending,
+        match this.finish_receiver.poll_next(cx) {
+            Poll::Ready(Some(val)) => match val {
+                Ok(item) => {
+                    *this.next_offset += item.1.len() as u64;
+                    Poll::Ready(Some(Ok(item)))
+                }
+                Err(e) => Poll::Ready(Some(Err(ObjectClientError::ClientError(e.into())))),
+            },
+            Poll::Ready(None) | Poll::Pending => match this.request.poll(cx) {
+                Poll::Ready(Ok(_)) => {
+                    *this.finished = true;
+                    Poll::Ready(None)
+                }
+                Poll::Ready(Err(e)) => {
+                    *this.finished = true;
+                    Poll::Ready(Some(Err(e)))
+                }
+                Poll::Pending => {
+                    // If the request is still not finished but the read window is not enough to poll
+                    // the next chunk we might want to return error instead of keeping the request blocked.
+                    if *this.enable_backpressure && this.read_window_range <= this.next_offset {
+                        return Poll::Ready(Some(Err(ObjectClientError::ClientError(
+                            S3RequestError::EmptyReadWindow,
+                        ))));
+                    }
+                    Poll::Pending
+                }
+            },
         }
     }
 }

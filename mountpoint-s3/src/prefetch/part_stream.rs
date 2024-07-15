@@ -3,15 +3,18 @@ use std::{fmt::Debug, ops::Range};
 use bytes::Bytes;
 use futures::task::SpawnExt;
 use futures::{pin_mut, task::Spawn, StreamExt};
-use mountpoint_s3_client::{types::ETag, ObjectClient};
+use mountpoint_s3_client::{types::GetObjectRequest, ObjectClient};
 use tracing::{debug_span, error, trace, Instrument};
 
 use crate::checksums::ChecksummedBytes;
 use crate::object::ObjectId;
+use crate::prefetch::backpressure_controller::new_backpressure_controller;
 use crate::prefetch::part::Part;
 use crate::prefetch::part_queue::unbounded_part_queue;
 use crate::prefetch::task::RequestTask;
 use crate::prefetch::PrefetchReadError;
+
+use super::task::RequestTaskConfig;
 
 /// A generic interface to retrieve data from objects in a S3-like store.
 pub trait ObjectPartStream {
@@ -21,11 +24,7 @@ pub trait ObjectPartStream {
     fn spawn_get_object_request<Client>(
         &self,
         client: &Client,
-        bucket: &str,
-        key: &str,
-        if_match: ETag,
-        range: RequestRange,
-        preferred_part_size: usize,
+        config: RequestTaskConfig,
     ) -> RequestTask<Client::ClientError>
     where
         Client: ObjectClient + Clone + Send + Sync + 'static;
@@ -166,32 +165,45 @@ where
     fn spawn_get_object_request<Client>(
         &self,
         client: &Client,
-        bucket: &str,
-        key: &str,
-        if_match: ETag,
-        range: RequestRange,
-        preferred_part_size: usize,
+        config: RequestTaskConfig,
     ) -> RequestTask<Client::ClientError>
     where
         Client: ObjectClient + Clone + Send + Sync + 'static,
     {
-        assert!(preferred_part_size > 0);
-        let request_range = range.align(client.part_size().unwrap_or(8 * 1024 * 1024) as u64, true);
-        let start = request_range.start();
-        let size = request_range.len();
+        assert!(config.preferred_part_size > 0);
+
+        let initial_read_window_range = config.range.start() + config.initial_read_window_size as u64;
 
         let (part_queue, part_queue_producer) = unbounded_part_queue();
-        trace!(range=?request_range, "spawning request");
+        let (backpressure_controller, mut backpressure_limiter) = new_backpressure_controller(
+            config.initial_read_window_size,
+            config.max_read_window_size,
+            config.read_window_size_multiplier,
+            initial_read_window_range,
+            config.range.end(),
+        );
+        trace!(range=?config.range, "spawning request");
 
         let request_task = {
             let client = client.clone();
-            let bucket = bucket.to_owned();
-            let id = ObjectId::new(key.to_owned(), if_match);
-            let span = debug_span!("prefetch", range=?request_range);
+            let bucket = config.bucket;
+            let id = ObjectId::new(config.key, config.if_match);
+            let span = debug_span!("prefetch", range=?config.range);
 
             async move {
-                let get_object_result = match client
-                    .get_object(&bucket, id.key(), Some(request_range.into()), Some(id.etag().clone()))
+                // Normally, initial read window size should be very small (~1MB) so that we can serve the first read request as soon as possible,
+                // but right now the CRT only returns data in chunks of part size (default to 8MB) even if initial read window is smaller than that.
+                // This makes time to first byte much higher than expected.
+                //
+                // To workaround this issue, we instead create two requests for the part stream where the first request has the range exactly equal to
+                // the initial read window size to force the CRT to return data immediately, and the second request for the rest of the stream.
+                // From this, our first read window range must be 2x of the initial read window size because we make two requests, each with the same
+                // initial read window size.
+                //
+                // Let's start by issuing the first request with a range trimmed to initial read window size
+                let first_req_range = config.range.trim_end(initial_read_window_range);
+                let first_request = match client
+                    .get_object(&bucket, id.key(), Some(first_req_range.into()), Some(id.etag().clone()))
                     .await
                 {
                     Ok(get_object_result) => get_object_result,
@@ -202,9 +214,11 @@ where
                     }
                 };
 
-                pin_mut!(get_object_result);
+                pin_mut!(first_request);
+                // Make there is enough read window because we don't want to block this request at all
+                first_request.as_mut().increment_read_window(first_req_range.len());
                 loop {
-                    match get_object_result.next().await {
+                    match first_request.next().await {
                         Some(Ok((offset, body))) => {
                             trace!(offset, length = body.len(), "received GetObject part");
                             metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
@@ -213,7 +227,7 @@ where
                             let mut body: Bytes = body.into();
                             let mut curr_offset = offset;
                             loop {
-                                let chunk_size = preferred_part_size.min(body.len());
+                                let chunk_size = config.preferred_part_size.min(body.len());
                                 if chunk_size == 0 {
                                     break;
                                 }
@@ -234,6 +248,91 @@ where
                         None => break,
                     }
                 }
+
+                // After the first request is completed we will create the second request for the rest of the stream,
+                // but only if there is something left to be fetched.
+                let range = config.range.trim_start(initial_read_window_range);
+                if !range.is_empty() {
+                    // First, blocks until there is enough read window and record the new read window offset before creating the request
+                    let next_read_window_offset =
+                        match backpressure_limiter.wait_for_read_window_increment(range.start()).await {
+                            Ok(next) => next,
+                            Err(e) => {
+                                part_queue_producer.push(Err(e));
+                                return;
+                            }
+                        };
+
+                    let request = match client
+                        .get_object(&bucket, id.key(), Some(range.into()), Some(id.etag().clone()))
+                        .await
+                    {
+                        Ok(get_object_result) => get_object_result,
+                        Err(e) => {
+                            error!(key=id.key(), error=?e, "GetObject request failed");
+                            part_queue_producer.push(Err(PrefetchReadError::GetRequestFailed(e)));
+                            return;
+                        }
+                    };
+
+                    pin_mut!(request);
+                    // Increment read window if we got a request from the backpressure limiter earlier
+                    if let Some(next_read_window_offset) = next_read_window_offset {
+                        let diff =
+                            next_read_window_offset.saturating_sub(request.as_ref().read_window_range()) as usize;
+                        request.as_mut().increment_read_window(diff);
+                    }
+
+                    loop {
+                        match request.next().await {
+                            Some(Ok((offset, body))) => {
+                                trace!(offset, length = body.len(), "received GetObject part");
+                                metrics::counter!("s3.client.total_bytes", "type" => "read")
+                                    .increment(body.len() as u64);
+                                // pre-split the body into multiple parts as suggested by preferred part size
+                                // in order to avoid validating checksum on large parts at read.
+                                let mut body: Bytes = body.into();
+                                let mut curr_offset = offset;
+                                loop {
+                                    let chunk_size = config.preferred_part_size.min(body.len());
+                                    if chunk_size == 0 {
+                                        break;
+                                    }
+                                    let chunk = body.split_to(chunk_size);
+                                    // S3 doesn't provide checksum for us if the request range is not aligned to
+                                    // object part boundaries, so we're computing our own checksum here.
+                                    let checksum_bytes = ChecksummedBytes::new(chunk);
+                                    let part = Part::new(id.clone(), curr_offset, checksum_bytes);
+                                    curr_offset += part.len() as u64;
+                                    part_queue_producer.push(Ok(part));
+                                }
+
+                                // Blocks if read window increment if it's not enough to read the next offset
+                                let next_offset = curr_offset;
+                                match backpressure_limiter.wait_for_read_window_increment(next_offset).await {
+                                    Ok(next) => {
+                                        if let Some(next_read_window_offset) = next {
+                                            let diff = next_read_window_offset
+                                                .saturating_sub(request.as_ref().read_window_range())
+                                                as usize;
+                                            request.as_mut().increment_read_window(diff);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        part_queue_producer.push(Err(e));
+                                        break;
+                                    }
+                                }
+                            }
+                            Some(Err(e)) => {
+                                error!(key=id.key(), error=?e, "GetObject body part failed");
+                                part_queue_producer.push(Err(PrefetchReadError::GetRequestFailed(e)));
+                                break;
+                            }
+                            None => break,
+                        }
+                    }
+                }
                 trace!("request finished");
             }
             .instrument(span)
@@ -241,7 +340,7 @@ where
 
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
 
-        RequestTask::from_handle(task_handle, size, start, part_queue)
+        RequestTask::from_handle(task_handle, config.range, part_queue, backpressure_controller)
     }
 }
 

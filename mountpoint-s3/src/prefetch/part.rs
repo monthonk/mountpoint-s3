@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use thiserror::Error;
 
 use crate::checksums::ChecksummedBytes;
@@ -19,6 +20,40 @@ impl Part {
             offset,
             checksummed_bytes,
         }
+    }
+
+    /// Split the given bytes into parts with the given boundaries, assuming that the boundaries start from offset 0.
+    /// Aligning part with the right boundaries will reduce the compute time for validating the checksum at read.
+    pub fn split_to_parts(id: ObjectId, offset: u64, mut body: Bytes, alignment: usize) -> Vec<Self> {
+        let mut curr_offset = offset;
+        let mut parts = Vec::new();
+
+        // First, align the front to part boundaries
+        if offset % alignment as u64 != 0 {
+            let distance_to_align = alignment - (curr_offset % alignment as u64) as usize;
+            let chunk_size = distance_to_align.min(body.len());
+            if chunk_size > 0 {
+                let chunk = body.split_to(chunk_size);
+                let checksum_bytes = ChecksummedBytes::new(chunk);
+                let part = Part::new(id.clone(), curr_offset, checksum_bytes);
+                curr_offset += part.len() as u64;
+                parts.push(part);
+            }
+        }
+
+        // After that we can just split it evenly
+        loop {
+            let chunk_size = alignment.min(body.len());
+            if chunk_size == 0 {
+                break;
+            }
+            let chunk = body.split_to(chunk_size);
+            let checksum_bytes = ChecksummedBytes::new(chunk);
+            let part = Part::new(id.clone(), curr_offset, checksum_bytes);
+            curr_offset += part.len() as u64;
+            parts.push(part);
+        }
+        parts
     }
 
     pub fn extend(&mut self, other: &Part) -> Result<(), PartMismatchError> {

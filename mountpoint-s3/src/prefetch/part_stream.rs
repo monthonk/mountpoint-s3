@@ -1,12 +1,10 @@
 use std::{fmt::Debug, ops::Range};
 
-use bytes::Bytes;
 use futures::task::SpawnExt;
 use futures::{pin_mut, task::Spawn, StreamExt};
 use mountpoint_s3_client::{types::GetObjectRequest, ObjectClient};
 use tracing::{debug_span, error, trace, Instrument};
 
-use crate::checksums::ChecksummedBytes;
 use crate::object::ObjectId;
 use crate::prefetch::backpressure_controller::new_backpressure_controller;
 use crate::prefetch::part::Part;
@@ -224,19 +222,9 @@ where
                             metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
                             // pre-split the body into multiple parts as suggested by preferred part size
                             // in order to avoid validating checksum on large parts at read.
-                            let mut body: Bytes = body.into();
-                            let mut curr_offset = offset;
-                            loop {
-                                let chunk_size = config.preferred_part_size.min(body.len());
-                                if chunk_size == 0 {
-                                    break;
-                                }
-                                let chunk = body.split_to(chunk_size);
-                                // S3 doesn't provide checksum for us if the request range is not aligned to
-                                // object part boundaries, so we're computing our own checksum here.
-                                let checksum_bytes = ChecksummedBytes::new(chunk);
-                                let part = Part::new(id.clone(), curr_offset, checksum_bytes);
-                                curr_offset += part.len() as u64;
+                            let parts =
+                                Part::split_to_parts(id.clone(), offset, body.into(), config.preferred_part_size);
+                            for part in parts {
                                 part_queue_producer.push(Ok(part));
                             }
                         }
@@ -286,29 +274,18 @@ where
                     loop {
                         match request.next().await {
                             Some(Ok((offset, body))) => {
-                                trace!(offset, length = body.len(), "received GetObject part");
-                                metrics::counter!("s3.client.total_bytes", "type" => "read")
-                                    .increment(body.len() as u64);
-                                // pre-split the body into multiple parts as suggested by preferred part size
-                                // in order to avoid validating checksum on large parts at read.
-                                let mut body: Bytes = body.into();
-                                let mut curr_offset = offset;
-                                loop {
-                                    let chunk_size = config.preferred_part_size.min(body.len());
-                                    if chunk_size == 0 {
-                                        break;
-                                    }
-                                    let chunk = body.split_to(chunk_size);
-                                    // S3 doesn't provide checksum for us if the request range is not aligned to
-                                    // object part boundaries, so we're computing our own checksum here.
-                                    let checksum_bytes = ChecksummedBytes::new(chunk);
-                                    let part = Part::new(id.clone(), curr_offset, checksum_bytes);
-                                    curr_offset += part.len() as u64;
+                                let body_len = body.len() as u64;
+                                trace!(offset, length = body_len, "received GetObject part");
+                                metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body_len);
+
+                                let parts =
+                                    Part::split_to_parts(id.clone(), offset, body.into(), config.preferred_part_size);
+                                for part in parts {
                                     part_queue_producer.push(Ok(part));
                                 }
 
                                 // Blocks if read window increment if it's not enough to read the next offset
-                                let next_offset = curr_offset;
+                                let next_offset = offset + body_len;
                                 match backpressure_limiter.wait_for_read_window_increment(next_offset).await {
                                     Ok(next) => {
                                         if let Some(next_read_window_offset) = next {

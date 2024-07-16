@@ -70,6 +70,7 @@ where
                 config.key,
                 config.if_match,
                 part_queue_producer,
+                config.preferred_part_size,
             );
             let span = debug_span!("prefetch", range=?config.range);
             request
@@ -90,6 +91,7 @@ struct CachingRequest<Client: ObjectClient, Cache> {
     bucket: String,
     cache_key: ObjectId,
     part_queue_producer: PartQueueProducer<Client::ClientError>,
+    preferred_part_size: usize,
 }
 
 impl<Client, Cache> CachingRequest<Client, Cache>
@@ -104,6 +106,7 @@ where
         key: String,
         etag: ETag,
         part_queue_producer: PartQueueProducer<Client::ClientError>,
+        preferred_part_size: usize,
     ) -> Self {
         let cache_key = ObjectId::new(key, etag);
         Self {
@@ -112,6 +115,7 @@ where
             bucket,
             cache_key,
             part_queue_producer,
+            preferred_part_size,
         }
     }
 
@@ -380,11 +384,15 @@ where
                         let trim_end = (part_range.end().saturating_sub(offset)) as usize;
                         // Put to the part queue only if returned data is in the actual request range.
                         if trim_end > trim_start {
-                            let checksum_bytes = ChecksummedBytes::new(body.clone());
-                            let bytes = checksum_bytes.slice(trim_start..trim_end);
-
-                            let part = Part::new(self.cache_key.clone(), part_range.start(), bytes);
-                            self.part_queue_producer.push(Ok(part));
+                            let parts = Part::split_to_parts(
+                                self.cache_key.clone(),
+                                part_range.start(),
+                                body.slice(trim_start..trim_end),
+                                self.preferred_part_size,
+                            );
+                            for part in parts {
+                                self.part_queue_producer.push(Ok(part));
+                            }
                         }
 
                         // Now we can fill the caching blocks.
@@ -573,7 +581,7 @@ mod tests {
                 key: key.to_owned(),
                 if_match: etag.clone(),
                 range,
-                preferred_part_size: 0,
+                preferred_part_size: 256 * KB,
                 initial_read_window_size,
                 max_read_window_size,
                 read_window_size_multiplier,
@@ -592,7 +600,7 @@ mod tests {
                 key: key.to_owned(),
                 if_match: etag,
                 range,
-                preferred_part_size: 0,
+                preferred_part_size: 256 * KB,
                 initial_read_window_size,
                 max_read_window_size,
                 read_window_size_multiplier,
@@ -643,7 +651,7 @@ mod tests {
                     key: key.to_owned(),
                     if_match: etag.clone(),
                     range: RequestRange::new(object_size, offset as u64, preferred_size),
-                    preferred_part_size: 0,
+                    preferred_part_size: 256 * KB,
                     initial_read_window_size,
                     max_read_window_size,
                     read_window_size_multiplier,

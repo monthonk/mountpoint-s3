@@ -1,5 +1,4 @@
 use futures::future::RemoteHandle;
-use mountpoint_s3_client::types::ETag;
 
 use crate::prefetch::part::Part;
 use crate::prefetch::part_queue::PartQueue;
@@ -7,17 +6,6 @@ use crate::prefetch::PrefetchReadError;
 
 use super::backpressure_controller::BackpressureController;
 use super::part_stream::RequestRange;
-
-pub struct RequestTaskConfig {
-    pub(super) bucket: String,
-    pub(super) key: String,
-    pub(super) if_match: ETag,
-    pub(super) range: RequestRange,
-    pub(super) preferred_part_size: usize,
-    pub(super) initial_read_window_size: usize,
-    pub(super) max_read_window_size: usize,
-    pub(super) read_window_size_multiplier: usize,
-}
 
 /// A single GetObject request submitted to the S3 client
 #[derive(Debug)]
@@ -48,17 +36,13 @@ impl<E: std::error::Error + Send + Sync> RequestTask<E> {
     }
 
     // Push a given list of parts in front of the part queue
-    pub async fn push_front(&mut self, mut parts: Vec<Part>) -> Result<(), PrefetchReadError<E>> {
-        // Merge all parts into one single part.
+    pub async fn push_front(&mut self, parts: Vec<Part>) -> Result<(), PrefetchReadError<E>> {
+        // Merge all parts into one single part by pushing them to the front of the part queue.
         // This could result in a really big part, but we normally use this only for backward seek
         // so its size should not be bigger than the prefetcher's `max_backward_seek_distance`.
-        let part = parts.iter_mut().reduce(|acc, e| {
-            acc.extend(e).unwrap();
-            acc
-        });
-        if let Some(part) = part {
+        for part in parts.into_iter().rev() {
             self.remaining += part.len();
-            self.part_queue.push_front(part.clone()).await;
+            self.part_queue.push_front(part).await?;
         }
         Ok(())
     }
@@ -101,10 +85,10 @@ impl<E: std::error::Error + Send + Sync> RequestTask<E> {
 
     /// Maximum offset which data is known to be already in the `self.part_queue`
     pub fn available_offset(&self) -> u64 {
-        self.start_offset() + self.part_queue.bytes_received()
+        self.start_offset() + self.part_queue.bytes_received() as u64
     }
 
-    pub fn read_window_range(&self) -> u64 {
-        self.backpressure_controller.read_window_range()
+    pub fn read_window_offset(&self) -> u64 {
+        self.backpressure_controller.read_window_offset()
     }
 }

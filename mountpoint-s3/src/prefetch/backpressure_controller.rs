@@ -9,14 +9,14 @@ pub struct BackpressureController {
     preferred_read_window_size: usize,
     max_read_window_size: usize,
     read_window_size_multiplier: usize,
-    read_window_range: u64,
+    read_window_offset: u64,
     last_request_offset: u64,
 }
 
 #[derive(Debug)]
 pub struct BackpressureLimiter {
     read_window_incrementing_queue: Receiver<usize>,
-    read_window_range: u64,
+    read_window_offset: u64,
 }
 
 /// Creates a [BackpressureController] and its related [BackpressureLimiter].
@@ -34,7 +34,7 @@ pub fn new_backpressure_controller(
     preferred_read_window_size: usize,
     max_read_window_size: usize,
     read_window_size_multiplier: usize,
-    read_window_range: u64,
+    read_window_offset: u64,
     last_request_offset: u64,
 ) -> (BackpressureController, BackpressureLimiter) {
     let (read_window_updater, read_window_incrementing_queue) = unbounded();
@@ -43,12 +43,12 @@ pub fn new_backpressure_controller(
         preferred_read_window_size,
         max_read_window_size,
         read_window_size_multiplier,
-        read_window_range,
+        read_window_offset,
         last_request_offset,
     };
     let limiter = BackpressureLimiter {
         read_window_incrementing_queue,
-        read_window_range,
+        read_window_offset,
     };
     (controller, limiter)
 }
@@ -58,8 +58,8 @@ impl BackpressureController {
         self.preferred_read_window_size = preferred_read_window_size;
     }
 
-    pub fn read_window_range(&self) -> u64 {
-        self.read_window_range
+    pub fn read_window_offset(&self) -> u64 {
+        self.read_window_offset
     }
 
     // Try scaling up preferred read window size with a multiplier configured at initialization.
@@ -79,24 +79,24 @@ impl BackpressureController {
     /// Signal the stream producer about the next offset we might want to read from the stream. The backpressure controller
     /// will ensure that the read window size is enough to read this offset and that it is always close to `preferred_read_window_size`.
     pub async fn next_offset_hint<E>(&mut self, next_offset: u64) -> Result<(), PrefetchReadError<E>> {
-        let mut remaining_window = self.read_window_range.saturating_sub(next_offset) as usize;
+        let mut remaining_window = self.read_window_offset.saturating_sub(next_offset) as usize;
         // Increment the read window only if the remaining window reaches some threshold i.e. half of it left.
         while remaining_window < (self.preferred_read_window_size / 2)
-            && self.read_window_range < self.last_request_offset
+            && self.read_window_offset < self.last_request_offset
         {
             let to_increase = next_offset
                 .saturating_add(self.preferred_read_window_size as u64)
-                .saturating_sub(self.read_window_range) as usize;
+                .saturating_sub(self.read_window_offset) as usize;
             trace!(
                 next_offset,
-                read_window_range = self.read_window_range,
+                read_window_offset = self.read_window_offset,
                 preferred_read_window_size = self.preferred_read_window_size,
                 to_increase,
                 "incrementing read window"
             );
             self.increment_read_window(to_increase).await?;
-            self.read_window_range += to_increase as u64;
-            remaining_window = self.read_window_range.saturating_sub(next_offset) as usize;
+            self.read_window_offset += to_increase as u64;
+            remaining_window = self.read_window_offset.saturating_sub(next_offset) as usize;
         }
         Ok(())
     }
@@ -112,8 +112,8 @@ impl BackpressureController {
 }
 
 impl BackpressureLimiter {
-    pub fn read_window_range(&self) -> u64 {
-        self.read_window_range
+    pub fn read_window_offset(&self) -> u64 {
+        self.read_window_offset
     }
 
     /// Checks if there is enough read window to put the next item with a given offset to the stream.
@@ -124,28 +124,31 @@ impl BackpressureLimiter {
         &mut self,
         offset: u64,
     ) -> Result<Option<u64>, PrefetchReadError<E>> {
-        if self.read_window_range > offset {
-            if let Ok(len) = self.read_window_incrementing_queue.try_recv() {
-                self.read_window_range += len as u64;
-                Ok(Some(self.read_window_range))
+        // There is already enough read window so no need to block
+        if self.read_window_offset > offset {
+            // Check the read window incrementing queue to see there is an early request to increase read window
+            let new_read_window_offset = if let Ok(len) = self.read_window_incrementing_queue.try_recv() {
+                self.read_window_offset += len as u64;
+                Some(self.read_window_offset)
             } else {
-                Ok(None)
-            }
-        } else {
-            // Block until we have enough read window to read the next chunk
-            while self.read_window_range <= offset {
-                trace!(
-                    offset,
-                    read_window_range = self.read_window_range,
-                    "blocking for read window increment"
-                );
-                let recv = self.read_window_incrementing_queue.recv().await;
-                match recv {
-                    Ok(len) => self.read_window_range += len as u64,
-                    Err(_) => return Err(PrefetchReadError::ReadWindowIncrement),
-                }
-            }
-            Ok(Some(self.read_window_range))
+                None
+            };
+            return Ok(new_read_window_offset);
         }
+
+        // Reaching here means there is not enough read window, so we block until it is large enough
+        while self.read_window_offset <= offset {
+            trace!(
+                offset,
+                read_window_offset = self.read_window_offset,
+                "blocking for read window increment"
+            );
+            let recv = self.read_window_incrementing_queue.recv().await;
+            match recv {
+                Ok(len) => self.read_window_offset += len as u64,
+                Err(_) => return Err(PrefetchReadError::ReadWindowIncrement),
+            }
+        }
+        Ok(Some(self.read_window_offset))
     }
 }

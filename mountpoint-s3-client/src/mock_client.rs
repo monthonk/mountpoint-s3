@@ -476,7 +476,7 @@ pub struct MockGetObjectRequest {
     length: usize,
     part_size: usize,
     enable_backpressure: bool,
-    read_window_range: u64,
+    read_window_offset: u64,
 }
 
 impl MockGetObjectRequest {
@@ -498,11 +498,11 @@ impl GetObjectRequest for MockGetObjectRequest {
     type ClientError = MockClientError;
 
     fn increment_read_window(mut self: Pin<&mut Self>, len: usize) {
-        self.read_window_range += len as u64;
+        self.read_window_offset += len as u64;
     }
 
-    fn read_window_range(self: Pin<&Self>) -> u64 {
-        self.read_window_range
+    fn read_window_offset(self: Pin<&Self>) -> u64 {
+        self.read_window_offset
     }
 }
 
@@ -517,7 +517,7 @@ impl Stream for MockGetObjectRequest {
         let next_read_size = self.part_size.min(self.length);
 
         // Simulate backpressure mechanism
-        if self.enable_backpressure && self.next_offset >= self.read_window_range {
+        if self.enable_backpressure && self.next_offset >= self.read_window_offset {
             return Poll::Ready(Some(Err(ObjectClientError::ClientError(MockClientError(
                 "empty read window".into(),
             )))));
@@ -631,7 +631,7 @@ impl ObjectClient for MockClient {
                 length,
                 part_size: self.config.part_size,
                 enable_backpressure: self.config.enable_backpressure,
-                read_window_range: next_offset + self.config.initial_read_window_size as u64,
+                read_window_offset: next_offset + self.config.initial_read_window_size as u64,
             })
         } else {
             Err(ObjectClientError::ServiceError(GetObjectError::NoSuchKey))
@@ -1014,7 +1014,7 @@ mod tests {
             next_offset += body.len() as u64;
             accum.extend_from_slice(&body[..]);
 
-            while next_offset >= get_request.as_ref().read_window_range() {
+            while next_offset >= get_request.as_ref().read_window_offset() {
                 get_request
                     .as_mut()
                     .increment_read_window(backpressure_read_window_size);

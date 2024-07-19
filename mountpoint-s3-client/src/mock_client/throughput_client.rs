@@ -73,9 +73,9 @@ impl GetObjectRequest for ThroughputGetObjectRequest {
         this.request.increment_read_window(len);
     }
 
-    fn read_window_range(self: Pin<&Self>) -> u64 {
+    fn read_window_offset(self: Pin<&Self>) -> u64 {
         let this = self.project_ref();
-        this.request.read_window_range()
+        this.request.read_window_offset()
     }
 }
 

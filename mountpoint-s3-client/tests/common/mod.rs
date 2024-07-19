@@ -217,7 +217,7 @@ pub async fn check_backpressure_get_result(
 
         // We run out of data to read if read window is smaller than accum length of data,
         // so we keeping adding window size, otherwise the request will be blocked.
-        while next_offset >= result.as_ref().read_window_range() {
+        while next_offset >= result.as_ref().read_window_offset() {
             result.as_mut().increment_read_window(read_window);
         }
     }

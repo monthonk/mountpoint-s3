@@ -1,7 +1,6 @@
-use bytes::Bytes;
 use thiserror::Error;
 
-use crate::checksums::ChecksummedBytes;
+use crate::checksums::{ChecksummedBytes, IntegrityError};
 use crate::object::ObjectId;
 
 /// A self-identifying part of an S3 object. Users can only retrieve the bytes from this part if
@@ -22,52 +21,13 @@ impl Part {
         }
     }
 
-    /// Split the given bytes into parts with the given boundaries, assuming that the boundaries start from offset 0.
-    /// Aligning part with the right boundaries will reduce the compute time for validating the checksum at read.
-    pub fn split_to_parts(id: ObjectId, offset: u64, mut body: Bytes, alignment: usize) -> Vec<Self> {
-        let mut curr_offset = offset;
-        let mut parts = Vec::new();
-
-        // First, align the front to part boundaries
-        if offset % alignment as u64 != 0 {
-            let distance_to_align = alignment - (curr_offset % alignment as u64) as usize;
-            let chunk_size = distance_to_align.min(body.len());
-            if chunk_size > 0 {
-                let chunk = body.split_to(chunk_size);
-                let checksum_bytes = ChecksummedBytes::new(chunk);
-                let part = Part::new(id.clone(), curr_offset, checksum_bytes);
-                curr_offset += part.len() as u64;
-                parts.push(part);
-            }
-        }
-
-        // After that we can just split it evenly
-        loop {
-            let chunk_size = alignment.min(body.len());
-            if chunk_size == 0 {
-                break;
-            }
-            let chunk = body.split_to(chunk_size);
-            let checksum_bytes = ChecksummedBytes::new(chunk);
-            let part = Part::new(id.clone(), curr_offset, checksum_bytes);
-            curr_offset += part.len() as u64;
-            parts.push(part);
-        }
-        parts
-    }
-
-    pub fn extend(&mut self, other: &Part) -> Result<(), PartMismatchError> {
+    pub fn extend(&mut self, other: &Part) -> Result<(), PartOperationError> {
         let expected_offset = self.offset + self.checksummed_bytes.len() as u64;
         other.check(&self.id, expected_offset)?;
-        self.checksummed_bytes
-            .extend(other.clone().checksummed_bytes)
-            .map_err(|_| PartMismatchError::Id {
-                actual: self.id.clone(),
-                requested: other.id.clone(),
-            })
+        Ok(self.checksummed_bytes.extend(other.clone().checksummed_bytes)?)
     }
 
-    pub fn into_bytes(self, id: &ObjectId, offset: u64) -> Result<ChecksummedBytes, PartMismatchError> {
+    pub fn into_bytes(self, id: &ObjectId, offset: u64) -> Result<ChecksummedBytes, PartOperationError> {
         self.check(id, offset).map(|_| self.checksummed_bytes)
     }
 
@@ -96,15 +56,15 @@ impl Part {
         self.checksummed_bytes.is_empty()
     }
 
-    fn check(&self, id: &ObjectId, offset: u64) -> Result<(), PartMismatchError> {
+    fn check(&self, id: &ObjectId, offset: u64) -> Result<(), PartOperationError> {
         if self.id != *id {
-            return Err(PartMismatchError::Id {
+            return Err(PartOperationError::IdMismatch {
                 actual: self.id.clone(),
                 requested: id.to_owned(),
             });
         }
         if self.offset != offset {
-            return Err(PartMismatchError::Offset {
+            return Err(PartOperationError::OffsetMismatch {
                 actual: self.offset,
                 requested: offset,
             });
@@ -114,19 +74,22 @@ impl Part {
 }
 
 #[derive(Debug, Error)]
-pub enum PartMismatchError {
+pub enum PartOperationError {
+    #[error("part integrity check failed")]
+    Integrity(#[from] IntegrityError),
+
     #[error("wrong part id: actual={actual:?}, requested={requested:?}")]
-    Id { actual: ObjectId, requested: ObjectId },
+    IdMismatch { actual: ObjectId, requested: ObjectId },
 
     #[error("wrong part offset: actual={actual}, requested={requested}")]
-    Offset { actual: u64, requested: u64 },
+    OffsetMismatch { actual: u64, requested: u64 },
 }
 
 #[cfg(test)]
 mod tests {
     use mountpoint_s3_client::types::ETag;
 
-    use crate::{checksums::ChecksummedBytes, object::ObjectId, prefetch::part::PartMismatchError};
+    use crate::{checksums::ChecksummedBytes, object::ObjectId, prefetch::part::PartOperationError};
 
     use super::Part;
 
@@ -185,7 +148,7 @@ mod tests {
         let result = first.extend(&second);
         assert!(matches!(
             result,
-            Err(PartMismatchError::Id {
+            Err(PartOperationError::IdMismatch {
                 actual: _,
                 requested: _
             })
@@ -218,7 +181,7 @@ mod tests {
         let result = first.extend(&second);
         assert!(matches!(
             result,
-            Err(PartMismatchError::Offset {
+            Err(PartOperationError::OffsetMismatch {
                 actual: _,
                 requested: _
             })

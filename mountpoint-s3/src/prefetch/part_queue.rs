@@ -1,12 +1,14 @@
 use std::time::Instant;
 
-use metrics::atomics::AtomicU64;
+use bytes::Bytes;
 use tracing::trace;
 
+use crate::checksums::ChecksummedBytes;
+use crate::object::ObjectId;
 use crate::prefetch::part::Part;
 use crate::prefetch::PrefetchReadError;
 use crate::sync::async_channel::{unbounded, Receiver, RecvError, Sender};
-use crate::sync::atomic::{AtomicBool, Ordering};
+use crate::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use crate::sync::{Arc, AsyncMutex};
 
 /// A queue of [Part]s where the first part can be partially read from if the reader doesn't want
@@ -17,7 +19,7 @@ pub struct PartQueue<E: std::error::Error> {
     receiver: Receiver<Result<Part, PrefetchReadError<E>>>,
     failed: AtomicBool,
     /// The total number of bytes sent to the underlying queue of `self.receiver`
-    bytes_received: Arc<AtomicU64>,
+    bytes_received: Arc<AtomicUsize>,
 }
 
 /// Producer side of the queue of [Part]s.
@@ -25,13 +27,13 @@ pub struct PartQueue<E: std::error::Error> {
 pub struct PartQueueProducer<E: std::error::Error> {
     sender: Sender<Result<Part, PrefetchReadError<E>>>,
     /// The total number of bytes sent to `self.sender`
-    bytes_sent: Arc<AtomicU64>,
+    bytes_sent: Arc<AtomicUsize>,
 }
 
 /// Creates an unbounded [PartQueue] and its related [PartQueueProducer].
 pub fn unbounded_part_queue<E: std::error::Error>() -> (PartQueue<E>, PartQueueProducer<E>) {
     let (sender, receiver) = unbounded();
-    let bytes_counter = Arc::new(AtomicU64::new(0));
+    let bytes_counter = Arc::new(AtomicUsize::new(0));
     let part_queue = PartQueue {
         current_part: AsyncMutex::new(None),
         receiver,
@@ -96,7 +98,7 @@ impl<E: std::error::Error + Send + Sync> PartQueue<E> {
 
     /// Push a new [Part] onto the front of the queue
     /// which actually just concatenate it with the current part
-    pub async fn push_front(&self, mut part: Part) {
+    pub async fn push_front(&self, mut part: Part) -> Result<(), PrefetchReadError<E>> {
         let mut current_part = self.current_part.lock().await;
 
         assert!(
@@ -105,22 +107,32 @@ impl<E: std::error::Error + Send + Sync> PartQueue<E> {
         );
 
         if let Some(current_part) = current_part.as_mut() {
-            part.extend(current_part).unwrap();
+            part.extend(current_part)?;
             *current_part = part;
         } else {
             *current_part = Some(part);
         }
+        Ok(())
     }
 
-    pub fn bytes_received(&self) -> u64 {
+    pub fn bytes_received(&self) -> usize {
         self.bytes_received.load(Ordering::SeqCst)
+    }
+}
+
+impl<E: std::error::Error + Send + Sync> Clone for PartQueueProducer<E> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            bytes_sent: self.bytes_sent.clone(),
+        }
     }
 }
 
 impl<E: std::error::Error + Send + Sync> PartQueueProducer<E> {
     /// Push a new [Part] onto the back of the queue
     pub fn push(&self, part: Result<Part, PrefetchReadError<E>>) {
-        let part_len = part.as_ref().map_or(0, |part| part.len()) as u64;
+        let part_len = part.as_ref().map_or(0, |part| part.len());
 
         // Unbounded channel will never actually block
         let send_result = self.sender.send_blocking(part);
@@ -129,6 +141,41 @@ impl<E: std::error::Error + Send + Sync> PartQueueProducer<E> {
         } else {
             self.bytes_sent.fetch_add(part_len, Ordering::SeqCst);
             metrics::gauge!("prefetch.bytes_in_queue").increment(part_len as f64);
+        }
+    }
+
+    /// Split the given bytes into parts with the given boundaries and push them to the part queue, assuming that
+    /// the boundaries start from offset 0.
+    ///
+    /// Aligning part with the right boundaries can reduce compute time for validating checksum at read.
+    pub fn split_and_push(&self, id: ObjectId, offset: u64, mut body: Bytes, alignment: usize) {
+        if body.is_empty() {
+            return;
+        }
+        let mut curr_offset = offset;
+
+        // First, align the front to part boundaries
+        if offset % alignment as u64 != 0 {
+            let distance_to_align = alignment - (curr_offset % alignment as u64) as usize;
+            let chunk_size = distance_to_align.min(body.len());
+            let chunk = body.split_to(chunk_size);
+            let checksum_bytes = ChecksummedBytes::new(chunk);
+            let part = Part::new(id.clone(), curr_offset, checksum_bytes);
+            curr_offset += part.len() as u64;
+            self.push(Ok(part));
+        }
+
+        // After that we can just split it evenly
+        loop {
+            if body.is_empty() {
+                break;
+            }
+            let chunk_size = alignment.min(body.len());
+            let chunk = body.split_to(chunk_size);
+            let checksum_bytes = ChecksummedBytes::new(chunk);
+            let part = Part::new(id.clone(), curr_offset, checksum_bytes);
+            curr_offset += part.len() as u64;
+            self.push(Ok(part));
         }
     }
 }

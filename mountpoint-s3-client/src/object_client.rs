@@ -381,7 +381,7 @@ pub trait GetObjectRequest:
 
     /// Get the upper bound of the range for read window. `GetObjectRequest` can only return data up to
     /// this offset *exclusively*.
-    fn read_window_range(self: Pin<&Self>) -> u64;
+    fn read_window_offset(self: Pin<&Self>) -> u64;
 }
 
 /// A streaming put request which allows callers to asynchronously write the body of the request.

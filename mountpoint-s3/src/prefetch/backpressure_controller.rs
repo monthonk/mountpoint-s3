@@ -1,7 +1,15 @@
+use std::ops::Range;
+
 use async_channel::{unbounded, Receiver, Sender};
 use tracing::trace;
 
 use super::PrefetchReadError;
+
+#[derive(Debug)]
+pub enum BackpressureFeedbackEvent {
+    DataRead(usize),
+    PartQueueStall,
+}
 
 #[derive(Debug)]
 pub struct BackpressureController {
@@ -10,7 +18,8 @@ pub struct BackpressureController {
     max_read_window_size: usize,
     read_window_size_multiplier: usize,
     read_window_offset: u64,
-    last_request_offset: u64,
+    current_read_offset: u64,
+    request_range: Range<u64>,
 }
 
 #[derive(Debug)]
@@ -35,7 +44,7 @@ pub fn new_backpressure_controller(
     max_read_window_size: usize,
     read_window_size_multiplier: usize,
     read_window_offset: u64,
-    last_request_offset: u64,
+    request_range: Range<u64>,
 ) -> (BackpressureController, BackpressureLimiter) {
     let (read_window_updater, read_window_incrementing_queue) = unbounded();
     let controller = BackpressureController {
@@ -44,7 +53,8 @@ pub fn new_backpressure_controller(
         max_read_window_size,
         read_window_size_multiplier,
         read_window_offset,
-        last_request_offset,
+        current_read_offset: request_range.start,
+        request_range,
     };
     let limiter = BackpressureLimiter {
         read_window_incrementing_queue,
@@ -54,49 +64,36 @@ pub fn new_backpressure_controller(
 }
 
 impl BackpressureController {
-    pub fn set_preferred_read_window_size(&mut self, preferred_read_window_size: usize) {
-        self.preferred_read_window_size = preferred_read_window_size;
-    }
-
     pub fn read_window_offset(&self) -> u64 {
         self.read_window_offset
     }
 
-    // Try scaling up preferred read window size with a multiplier configured at initialization.
-    pub fn try_scaling_up(&mut self) {
-        if self.preferred_read_window_size < self.max_read_window_size {
-            let new_read_window_size =
-                (self.preferred_read_window_size * self.read_window_size_multiplier).min(self.max_read_window_size);
-            trace!(
-                current_size = self.preferred_read_window_size,
-                new_size = new_read_window_size,
-                "scaling up preferred read window"
-            );
-            self.preferred_read_window_size = new_read_window_size;
-        }
-    }
-
-    /// Signal the stream producer about the next offset we might want to read from the stream. The backpressure controller
+    /// Send a feedback to the backpressure controller when reading data out of the stream. The backpressure controller
     /// will ensure that the read window size is enough to read this offset and that it is always close to `preferred_read_window_size`.
-    pub async fn next_offset_hint<E>(&mut self, next_offset: u64) -> Result<(), PrefetchReadError<E>> {
-        let mut remaining_window = self.read_window_offset.saturating_sub(next_offset) as usize;
-        // Increment the read window only if the remaining window reaches some threshold i.e. half of it left.
-        while remaining_window < (self.preferred_read_window_size / 2)
-            && self.read_window_offset < self.last_request_offset
-        {
-            let to_increase = next_offset
-                .saturating_add(self.preferred_read_window_size as u64)
-                .saturating_sub(self.read_window_offset) as usize;
-            trace!(
-                next_offset,
-                read_window_offset = self.read_window_offset,
-                preferred_read_window_size = self.preferred_read_window_size,
-                to_increase,
-                "incrementing read window"
-            );
-            self.increment_read_window(to_increase).await?;
-            self.read_window_offset += to_increase as u64;
-            remaining_window = self.read_window_offset.saturating_sub(next_offset) as usize;
+    pub async fn send_feedback<E>(&mut self, event: BackpressureFeedbackEvent) -> Result<(), PrefetchReadError<E>> {
+        match event {
+            BackpressureFeedbackEvent::DataRead(length) => {
+                self.current_read_offset += length as u64;
+                // Increment the read window only if the remaining window reaches some threshold i.e. half of it left.
+                while self.remaining_window() < (self.preferred_read_window_size / 2)
+                    && self.read_window_offset < self.request_range.end
+                {
+                    let to_increase = self
+                        .current_read_offset
+                        .saturating_add(self.preferred_read_window_size as u64)
+                        .saturating_sub(self.read_window_offset) as usize;
+                    trace!(
+                        current_read_offset = self.current_read_offset,
+                        read_window_offset = self.read_window_offset,
+                        preferred_read_window_size = self.preferred_read_window_size,
+                        to_increase,
+                        "incrementing read window"
+                    );
+                    self.increment_read_window(to_increase).await?;
+                    self.read_window_offset += to_increase as u64;
+                }
+            }
+            BackpressureFeedbackEvent::PartQueueStall => self.try_scaling_up(),
         }
         Ok(())
     }
@@ -108,6 +105,24 @@ impl BackpressureController {
             .send(len)
             .await
             .map_err(|_| PrefetchReadError::ReadWindowIncrement)
+    }
+
+    fn remaining_window(&self) -> usize {
+        self.read_window_offset.saturating_sub(self.current_read_offset) as usize
+    }
+
+    // Try scaling up preferred read window size with a multiplier configured at initialization.
+    fn try_scaling_up(&mut self) {
+        if self.preferred_read_window_size < self.max_read_window_size {
+            let new_read_window_size =
+                (self.preferred_read_window_size * self.read_window_size_multiplier).min(self.max_read_window_size);
+            trace!(
+                current_size = self.preferred_read_window_size,
+                new_size = new_read_window_size,
+                "scaling up preferred read window"
+            );
+            self.preferred_read_window_size = new_read_window_size;
+        }
     }
 }
 

@@ -186,14 +186,14 @@ where
         let initial_read_window_offset = config.range.start() + config.initial_read_window_size as u64;
         let range = config.range;
 
-        let (part_queue, part_queue_producer) = unbounded_part_queue();
         let (backpressure_controller, backpressure_limiter) = new_backpressure_controller(
             config.initial_read_window_size,
             config.max_read_window_size,
             config.read_window_size_multiplier,
             initial_read_window_offset,
-            config.range.end(),
+            range.into(),
         );
+        let (part_queue, part_queue_producer) = unbounded_part_queue(Some(backpressure_controller));
         trace!(range=?config.range, "spawning request");
 
         let request_task = {
@@ -216,7 +216,7 @@ where
 
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
 
-        RequestTask::from_handle(task_handle, range, part_queue, backpressure_controller)
+        RequestTask::from_handle(task_handle, range, part_queue)
     }
 }
 
@@ -235,9 +235,6 @@ where
         &mut self,
         initial_read_window_offset: u64,
     ) -> Result<(), PrefetchReadError<Client::ClientError>> {
-        let bucket = &self.config.bucket;
-        let id = &self.config.object_id;
-
         // Normally, initial read window size should be very small (~1MB) so that we can serve the first read request as soon as possible,
         // but right now the CRT only returns data in chunks of part size (default to 8MB) even if initial read window is smaller than that.
         // This makes time to first byte much higher than expected.
@@ -249,28 +246,7 @@ where
         //
         // Let's start by issuing the first request with a range trimmed to initial read window offset
         let first_req_range = self.config.range.trim_end(initial_read_window_offset);
-        let first_request = self
-            .client
-            .get_object(bucket, id.key(), Some(first_req_range.into()), Some(id.etag().clone()))
-            .await
-            .map_err(PrefetchReadError::GetRequestFailed)?;
-
-        pin_mut!(first_request);
-        // Make there is enough read window because we don't want to block this request at all
-        first_request.as_mut().increment_read_window(first_req_range.len());
-        loop {
-            let Some(next) = first_request.next().await else {
-                break;
-            };
-
-            let (offset, body) = next.map_err(PrefetchReadError::GetRequestFailed)?;
-            trace!(offset, length = body.len(), "received GetObject part");
-            metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
-            // pre-split the body into multiple parts as suggested by preferred part size
-            // in order to avoid validating checksum on large parts at read.
-            self.part_queue_producer
-                .split_and_push(id.clone(), offset, body.into(), self.config.preferred_part_size);
-        }
+        self.get_object(first_req_range).await?;
 
         // After the first request is completed we will create the second request for the rest of the stream,
         // but only if there is something left to be fetched.
@@ -278,25 +254,26 @@ where
         if range.is_empty() {
             return Ok(());
         }
+        self.get_object(range).await?;
+        Ok(())
+    }
 
-        // First, blocks until there is enough read window and record the new read window offset before creating the request
-        let next_read_window_offset = self
-            .backpressure_limiter
-            .wait_for_read_window_increment(range.start())
-            .await?;
+    async fn get_object(&mut self, req_range: RequestRange) -> Result<(), PrefetchReadError<Client::ClientError>> {
+        let bucket = &self.config.bucket;
+        let id = &self.config.object_id;
 
         let request = self
             .client
-            .get_object(bucket, id.key(), Some(range.into()), Some(id.etag().clone()))
+            .get_object(bucket, id.key(), Some(req_range.into()), Some(id.etag().clone()))
             .await
             .map_err(PrefetchReadError::GetRequestFailed)?;
 
         pin_mut!(request);
-        // Increment read window if we got a request from the backpressure limiter earlier
-        if let Some(next_read_window_offset) = next_read_window_offset {
-            let diff = next_read_window_offset.saturating_sub(request.as_ref().read_window_offset()) as usize;
-            request.as_mut().increment_read_window(diff);
-        }
+        let read_window_size_diff = self
+            .backpressure_limiter
+            .read_window_offset()
+            .saturating_sub(request.as_ref().read_window_offset()) as usize;
+        request.as_mut().increment_read_window(read_window_size_diff);
 
         loop {
             let Some(next) = request.next().await else {
@@ -305,9 +282,10 @@ where
 
             let (offset, body) = next.map_err(PrefetchReadError::GetRequestFailed)?;
             let body_len = body.len() as u64;
-            trace!(offset, length = body_len, "received GetObject part");
-            metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body_len);
-
+            trace!(offset, length = body.len(), "received GetObject part");
+            metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
+            // pre-split the body into multiple parts as suggested by preferred part size
+            // in order to avoid validating checksum on large parts at read.
             self.part_queue_producer
                 .split_and_push(id.clone(), offset, body.into(), self.config.preferred_part_size);
 

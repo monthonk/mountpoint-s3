@@ -52,14 +52,14 @@ where
         let initial_read_window_offset = config.range.start() + config.initial_read_window_size as u64;
         let range = config.range;
 
-        let (part_queue, part_queue_producer) = unbounded_part_queue();
         let (backpressure_controller, backpressure_limiter) = new_backpressure_controller(
             config.initial_read_window_size,
             config.max_read_window_size,
             config.read_window_size_multiplier,
             initial_read_window_offset,
-            config.range.end(),
+            range.into(),
         );
+        let (part_queue, part_queue_producer) = unbounded_part_queue(Some(backpressure_controller));
         trace!(range=?config.range, "spawning request");
 
         let request_task = {
@@ -78,7 +78,7 @@ where
 
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
 
-        RequestTask::from_handle(task_handle, range, part_queue, backpressure_controller)
+        RequestTask::from_handle(task_handle, range, part_queue)
     }
 }
 
@@ -178,9 +178,6 @@ where
         initial_read_window_offset: u64,
     ) -> Result<(), PrefetchReadError<Client::ClientError>> {
         let block_size = self.cache.block_size();
-        let bucket = &self.config.bucket;
-        let cache_key = self.config.object_id.clone();
-        let key = cache_key.key();
         assert!(block_size > 0);
 
         // Always request a range aligned with block boundaries (or to the end of the object).
@@ -191,7 +188,7 @@ where
             RequestRange::new(range.object_size(), block_aligned_byte_range.start, request_len);
 
         trace!(
-            ?key,
+            key = self.config.object_id.key(),
             range =? block_aligned_byte_range,
             original_range =? range,
             "fetching data from client"
@@ -205,186 +202,30 @@ where
         // This is an optimization to lower time to first bytes, see more details in ClientPartStream about why this is needed.
         let first_req_range = block_aligned_byte_range.trim_end(initial_read_window_offset);
         if !first_req_range.is_empty() {
-            let first_request = self
-                .client
-                .get_object(
-                    bucket,
-                    key,
-                    Some(first_req_range.into()),
-                    Some(cache_key.etag().clone()),
-                )
-                .await
-                .map_err(PrefetchReadError::GetRequestFailed)?;
-
-            pin_mut!(first_request);
-            // We want the first request to complete without any blocking
-            first_request.as_mut().increment_read_window(first_req_range.len());
-            loop {
-                assert!(
-                    buffer.len() < block_size as usize,
-                    "buffer should be flushed when we get a full block"
-                );
-                let Some(next) = first_request.next().await else {
-                    break;
-                };
-
-                let (offset, body) = next.map_err(PrefetchReadError::GetRequestFailed)?;
-                trace!(offset, length = body.len(), "received GetObject part");
-                metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
-
-                let expected_offset = block_offset + buffer.len() as u64;
-                if offset != expected_offset {
-                    warn!(key, offset, expected_offset, "wrong offset for GetObject body part");
-                    return Err(PrefetchReadError::GetRequestReturnedWrongOffset {
-                        offset,
-                        expected_offset,
-                    });
-                }
-
-                let mut body: Bytes = body.into();
-
-                // Return some bytes to the part queue even before we can fill an entire caching block because we want to
-                // start the feedback loop for the flow-control window.
-                // We need to do this because the read window might be enough to fetch "some data" from S3 but not the entire block.
-                // For example, consider that we got a file system read request with range 2MB to 4MB and we have to start
-                // reading from block_offset=0 and block_size=5MB. The first read window might have a range up 4MB which is enough
-                // to serve the read request but if the prefetcher is not able to read anything it cannot tell this stream to
-                // move its read window.
-                let part_range = range.trim_start(offset).trim_end(offset + body.len() as u64);
-                let trim_start = (part_range.start().saturating_sub(offset)) as usize;
-                let trim_end = (part_range.end().saturating_sub(offset)) as usize;
-                // Put to the part queue only if returned data is in the actual request range.
-                if trim_end > trim_start {
-                    let checksum_bytes = ChecksummedBytes::new(body.clone());
-                    let bytes = checksum_bytes.slice(trim_start..trim_end);
-
-                    let part = Part::new(cache_key.clone(), part_range.start(), bytes);
-                    self.part_queue_producer.push(Ok(part));
-                }
-
-                // Now we can fill the caching blocks.
-                while !body.is_empty() {
-                    let remaining = (block_size as usize).saturating_sub(buffer.len()).min(body.len());
-                    let chunk = body.split_to(remaining);
-                    if let Err(e) = buffer.extend(chunk.into()) {
-                        warn!(key, error=?e, "integrity check for body part failed");
-                        return Err(e.into());
-                    }
-                    if buffer.len() < block_size as usize {
-                        break;
-                    }
-
-                    // We have a full block: write it to the cache, send it to the queue, and flush the buffer.
-                    self.update_cache(block_index, block_offset, &buffer);
-                    block_index += 1;
-                    block_offset += block_size;
-                    buffer = ChecksummedBytes::default();
-                }
-            }
+            self.get_object(
+                first_req_range,
+                range,
+                block_size,
+                &mut block_index,
+                &mut block_offset,
+                &mut buffer,
+            )
+            .await?;
         }
 
         // After the first request is completed we will create the second request for the rest of the stream,
         // but only if there is something left to be fetched.
         let range = block_aligned_byte_range.trim_start(initial_read_window_offset);
         if !range.is_empty() {
-            // Blocks until there is enough read window and record the new read window offset before creating the request
-            let next_read_window_offset = self
-                .backpressure_limiter
-                .wait_for_read_window_increment(range.start())
-                .await?;
-
-            let get_object_request = self
-                .client
-                .get_object(bucket, key, Some(range.into()), Some(cache_key.etag().clone()))
-                .await
-                .map_err(PrefetchReadError::GetRequestFailed)?;
-
-            pin_mut!(get_object_request);
-
-            // Increment read window if we got a request from the backpressure limiter earlier
-            if let Some(next_read_window_offset) = next_read_window_offset {
-                let diff =
-                    next_read_window_offset.saturating_sub(get_object_request.as_ref().read_window_offset()) as usize;
-                get_object_request.as_mut().increment_read_window(diff);
-            }
-
-            // Current read window might be larger than the client's read window as some bytes were served from the cache, so we need to match them.
-            // for example, current read window of the caching stream might be 100MB while the first read window of the client is 8MB.
-            let read_window_size_diff =
-                self.backpressure_limiter
-                    .read_window_offset()
-                    .saturating_sub(get_object_request.as_ref().read_window_offset()) as usize;
-            get_object_request.as_mut().increment_read_window(read_window_size_diff);
-
-            loop {
-                assert!(
-                    buffer.len() < block_size as usize,
-                    "buffer should be flushed when we get a full block"
-                );
-                let Some(next) = get_object_request.next().await else {
-                    break;
-                };
-
-                let (offset, body) = next.map_err(PrefetchReadError::GetRequestFailed)?;
-                trace!(offset, length = body.len(), "received GetObject part");
-                metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
-
-                let expected_offset = block_offset + buffer.len() as u64;
-                if offset != expected_offset {
-                    warn!(key, offset, expected_offset, "wrong offset for GetObject body part");
-                    return Err(PrefetchReadError::GetRequestReturnedWrongOffset {
-                        offset,
-                        expected_offset,
-                    });
-                }
-
-                let mut body: Bytes = body.into();
-
-                // Same with what we do for the first request, return some bytes to the part queue even before we can fill
-                // an entire caching block because we want to start the feedback loop for the flow-control window.
-                let part_range = range.trim_start(offset).trim_end(offset + body.len() as u64);
-                let trim_start = (part_range.start().saturating_sub(offset)) as usize;
-                let trim_end = (part_range.end().saturating_sub(offset)) as usize;
-                // Put to the part queue only if returned data is in the actual request range.
-                if trim_end > trim_start {
-                    self.part_queue_producer.split_and_push(
-                        cache_key.clone(),
-                        part_range.start(),
-                        body.slice(trim_start..trim_end),
-                        self.config.preferred_part_size,
-                    );
-                }
-
-                // Now we can fill the caching blocks.
-                while !body.is_empty() {
-                    let remaining = (block_size as usize).saturating_sub(buffer.len()).min(body.len());
-                    let chunk = body.split_to(remaining);
-                    if let Err(e) = buffer.extend(chunk.into()) {
-                        warn!(key, error=?e, "integrity check for body part failed");
-                        return Err(e.into());
-                    }
-                    if buffer.len() < block_size as usize {
-                        break;
-                    }
-
-                    // We have a full block: write it to the cache, send it to the queue, and flush the buffer.
-                    self.update_cache(block_index, block_offset, &buffer);
-                    block_index += 1;
-                    block_offset += block_size;
-                    buffer = ChecksummedBytes::default();
-                }
-
-                let next_offset = block_offset + buffer.len() as u64;
-                if let Some(next_read_window_offset) = self
-                    .backpressure_limiter
-                    .wait_for_read_window_increment(next_offset)
-                    .await?
-                {
-                    let diff = next_read_window_offset.saturating_sub(get_object_request.as_ref().read_window_offset())
-                        as usize;
-                    get_object_request.as_mut().increment_read_window(diff);
-                }
-            }
+            self.get_object(
+                range,
+                range,
+                block_size,
+                &mut block_index,
+                &mut block_offset,
+                &mut buffer,
+            )
+            .await?;
         }
 
         if !buffer.is_empty() {
@@ -401,6 +242,129 @@ where
                 .push(Ok(self.make_part(buffer, block_index, block_offset, &range)));
         }
         trace!("request finished");
+        Ok(())
+    }
+
+    async fn get_object(
+        &mut self,
+        req_range: RequestRange,
+        original_range: RequestRange,
+        block_size: u64,
+        block_index: &mut u64,
+        block_offset: &mut u64,
+        buffer: &mut ChecksummedBytes,
+    ) -> Result<(), PrefetchReadError<Client::ClientError>> {
+        let bucket = &self.config.bucket;
+        let cache_key = &self.config.object_id;
+
+        let request = self
+            .client
+            .get_object(
+                bucket,
+                cache_key.key(),
+                Some(req_range.into()),
+                Some(cache_key.etag().clone()),
+            )
+            .await
+            .map_err(PrefetchReadError::GetRequestFailed)?;
+
+        pin_mut!(request);
+
+        let read_window_size_diff = self
+            .backpressure_limiter
+            .read_window_offset()
+            .saturating_sub(request.as_ref().read_window_offset()) as usize;
+        request.as_mut().increment_read_window(read_window_size_diff);
+
+        loop {
+            assert!(
+                buffer.len() < block_size as usize,
+                "buffer should be flushed when we get a full block"
+            );
+            let Some(next) = request.next().await else {
+                break;
+            };
+
+            let (offset, body) = next.map_err(PrefetchReadError::GetRequestFailed)?;
+            trace!(offset, length = body.len(), "received GetObject part");
+            metrics::counter!("s3.client.total_bytes", "type" => "read").increment(body.len() as u64);
+
+            let expected_offset = *block_offset + buffer.len() as u64;
+            if offset != expected_offset {
+                warn!(
+                    key = cache_key.key(),
+                    offset, expected_offset, "wrong offset for GetObject body part"
+                );
+                return Err(PrefetchReadError::GetRequestReturnedWrongOffset {
+                    offset,
+                    expected_offset,
+                });
+            }
+
+            let body: Bytes = body.into();
+
+            // Return some bytes to the part queue even before we can fill an entire caching block because we want to
+            // start the feedback loop for the flow-control window.
+            // We need to do this because the read window might be enough to fetch "some data" from S3 but not the entire block.
+            // For example, consider that we got a file system read request with range 2MB to 4MB and we have to start
+            // reading from block_offset=0 and block_size=5MB. The first read window might have a range up 4MB which is enough
+            // to serve the read request but if the prefetcher is not able to read anything it cannot tell this stream to
+            // move its read window.
+            let part_range = original_range.trim_start(offset).trim_end(offset + body.len() as u64);
+            let trim_start = (part_range.start().saturating_sub(offset)) as usize;
+            let trim_end = (part_range.end().saturating_sub(offset)) as usize;
+            // Put to the part queue only if returned data is in the actual request range.
+            if trim_end > trim_start {
+                self.part_queue_producer.split_and_push(
+                    cache_key.clone(),
+                    part_range.start(),
+                    body.slice(trim_start..trim_end),
+                    self.config.preferred_part_size,
+                );
+            }
+
+            // Now we can fill the caching blocks.
+            self.buffer_to_cache(body, buffer, block_size, block_index, block_offset)?;
+
+            let next_offset = *block_offset + buffer.len() as u64;
+            if let Some(next_read_window_offset) = self
+                .backpressure_limiter
+                .wait_for_read_window_increment(next_offset)
+                .await?
+            {
+                let diff = next_read_window_offset.saturating_sub(request.as_ref().read_window_offset()) as usize;
+                request.as_mut().increment_read_window(diff);
+            }
+        }
+        Ok(())
+    }
+
+    fn buffer_to_cache(
+        &self,
+        mut body: Bytes,
+        buffer: &mut ChecksummedBytes,
+        block_size: u64,
+        block_index: &mut u64,
+        block_offset: &mut u64,
+    ) -> Result<(), PrefetchReadError<Client::ClientError>> {
+        while !body.is_empty() {
+            let remaining = (block_size as usize).saturating_sub(buffer.len()).min(body.len());
+            let chunk = body.split_to(remaining);
+            if let Err(e) = buffer.extend(chunk.into()) {
+                let key = self.config.object_id.key();
+                warn!(key, error=?e, "integrity check for body part failed");
+                return Err(e.into());
+            }
+            if buffer.len() < block_size as usize {
+                break;
+            }
+
+            // We have a full block: write it to the cache, send it to the queue, and flush the buffer.
+            self.update_cache(*block_index, *block_offset, &buffer);
+            *block_index += 1;
+            *block_offset += block_size;
+            *buffer = ChecksummedBytes::default();
+        }
         Ok(())
     }
 

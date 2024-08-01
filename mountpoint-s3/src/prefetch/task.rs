@@ -1,9 +1,11 @@
 use futures::future::RemoteHandle;
 
+use crate::prefetch::backpressure_controller::BackpressureFeedbackEvent::{DataRead, PartQueueStall};
 use crate::prefetch::part::Part;
 use crate::prefetch::part_queue::PartQueue;
 use crate::prefetch::PrefetchReadError;
 
+use super::backpressure_controller::BackpressureController;
 use super::part_stream::RequestRange;
 
 /// A single GetObject request submitted to the S3 client
@@ -15,15 +17,22 @@ pub struct RequestTask<E: std::error::Error> {
     remaining: usize,
     range: RequestRange,
     part_queue: PartQueue<E>,
+    backpressure_controller: BackpressureController,
 }
 
 impl<E: std::error::Error + Send + Sync> RequestTask<E> {
-    pub fn from_handle(task_handle: RemoteHandle<()>, range: RequestRange, part_queue: PartQueue<E>) -> Self {
+    pub fn from_handle(
+        task_handle: RemoteHandle<()>,
+        range: RequestRange,
+        part_queue: PartQueue<E>,
+        backpressure_controller: BackpressureController,
+    ) -> Self {
         Self {
             _task_handle: task_handle,
             remaining: range.len(),
             range,
             part_queue,
+            backpressure_controller,
         }
     }
 
@@ -44,6 +53,18 @@ impl<E: std::error::Error + Send + Sync> RequestTask<E> {
         let part = self.part_queue.read(length).await?;
         debug_assert!(part.len() <= self.remaining);
         self.remaining -= part.len();
+
+        // We read some data out of the part queue so the read window should be moved
+        self.backpressure_controller.send_feedback(DataRead(part.len())).await?;
+
+        let next_offset = part.offset() + part.len() as u64;
+        let remaining_in_queue = self.available_offset().saturating_sub(next_offset) as usize;
+        // If the part queue is empty it means we are reading faster than the task could prefetch,
+        // so we should use larger window for the task.
+        if remaining_in_queue == 0 {
+            self.backpressure_controller.send_feedback(PartQueueStall).await?;
+        }
+
         Ok(part)
     }
 
@@ -69,6 +90,6 @@ impl<E: std::error::Error + Send + Sync> RequestTask<E> {
     }
 
     pub fn read_window_offset(&self) -> u64 {
-        self.part_queue.read_window_offset().unwrap_or(self.range.end())
+        self.backpressure_controller.read_window_offset()
     }
 }

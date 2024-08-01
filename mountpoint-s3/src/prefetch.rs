@@ -1026,7 +1026,8 @@ mod tests {
             bucket: "test-bucket".to_string(),
             part_size: PART_SIZE,
             enable_backpressure: true,
-            initial_read_window_size: PART_SIZE,
+            // For simplicity, prefetch the whole object in one request.
+            initial_read_window_size: OBJECT_SIZE,
             ..Default::default()
         };
 
@@ -1058,7 +1059,6 @@ mod tests {
             HashMap::new(),
         ));
 
-        // For simplicity, prefetch the whole object in one request.
         let prefetcher = Prefetcher::new(default_stream(), Default::default());
         block_on(async {
             let mut request = prefetcher.prefetch(client, "test-bucket", "hello", OBJECT_SIZE as u64, etag.clone());

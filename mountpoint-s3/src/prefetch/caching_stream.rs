@@ -4,7 +4,7 @@ use std::{ops::Range, sync::Arc};
 use async_channel::{unbounded, Receiver};
 use bytes::Bytes;
 use futures::task::{Spawn, SpawnExt};
-use futures::{pin_mut, try_join, StreamExt};
+use futures::{join, pin_mut, StreamExt};
 use mountpoint_s3_client::ObjectClient;
 use tracing::{debug_span, trace, warn, Instrument};
 
@@ -14,7 +14,7 @@ use crate::object::ObjectId;
 use crate::prefetch::backpressure_controller::new_backpressure_controller;
 use crate::prefetch::part::Part;
 use crate::prefetch::part_queue::{unbounded_part_queue, PartQueueProducer};
-use crate::prefetch::part_stream::{read_from_request, ObjectPartStream, RequestRange, RequestReaderOutput};
+use crate::prefetch::part_stream::{try_read_from_request, ObjectPartStream, RequestRange, RequestReaderOutput};
 use crate::prefetch::task::RequestTask;
 use crate::prefetch::PrefetchReadError;
 
@@ -61,7 +61,7 @@ where
             initial_read_window_offset,
             range.into(),
         );
-        let (part_queue, part_queue_producer) = unbounded_part_queue(Some(backpressure_controller));
+        let (part_queue, part_queue_producer) = unbounded_part_queue();
         trace!(range=?config.range, "spawning request");
 
         let request_task = {
@@ -74,7 +74,7 @@ where
 
         let task_handle = self.runtime.spawn_with_handle(request_task).unwrap();
 
-        RequestTask::from_handle(task_handle, range, part_queue)
+        RequestTask::from_handle(task_handle, range, part_queue, backpressure_controller)
     }
 }
 
@@ -153,17 +153,13 @@ where
             // If a block is uncached or reading it fails, fallback to S3 for the rest of the stream.
             metrics::counter!("prefetch.blocks_served_from_cache").increment(block_index - block_range.start);
             metrics::counter!("prefetch.blocks_requested_to_client").increment(block_range.end - block_index);
-            if let Err(e) = self
-                .get_from_client(
-                    range.trim_start(block_offset),
-                    block_index..block_range.end,
-                    initial_read_window_offset,
-                    part_queue_producer.clone(),
-                )
-                .await
-            {
-                part_queue_producer.push(Err(e));
-            }
+            self.get_from_client(
+                range.trim_start(block_offset),
+                block_index..block_range.end,
+                initial_read_window_offset,
+                part_queue_producer.clone(),
+            )
+            .await;
             return;
         }
         // We served the whole range from cache.
@@ -176,7 +172,7 @@ where
         block_range: Range<u64>,
         initial_read_window_offset: u64,
         part_queue_producer: PartQueueProducer<Client::ClientError>,
-    ) -> Result<(), PrefetchReadError<Client::ClientError>> {
+    ) {
         let bucket = &self.config.bucket;
         let cache_key = &self.config.object_id;
         let block_size = self.cache.block_size();
@@ -199,7 +195,6 @@ where
         let mut part_composer = CachingPartComposer {
             part_queue_producer,
             cache_key: cache_key.clone(),
-            preferred_part_size: self.config.preferred_part_size,
             original_range: range,
             block_index: block_range.start,
             block_offset: block_range.start * block_size,
@@ -212,7 +207,7 @@ where
         let first_req_range = block_aligned_byte_range.trim_end(initial_read_window_offset);
         if !first_req_range.is_empty() {
             let (body_sender, body_receiver) = unbounded();
-            let request_reader_future = read_from_request(
+            let request_reader_future = try_read_from_request(
                 body_sender,
                 &mut self.backpressure_limiter,
                 self.client.clone(),
@@ -220,8 +215,8 @@ where
                 cache_key.clone(),
                 first_req_range.into(),
             );
-            let part_composer_future = part_composer.compose_parts(body_receiver);
-            try_join!(request_reader_future, part_composer_future)?;
+            let part_composer_future = part_composer.try_compose_parts(body_receiver);
+            join!(request_reader_future, part_composer_future);
         }
 
         // After the first request is completed we will create the second request for the rest of the stream,
@@ -229,7 +224,7 @@ where
         let range = block_aligned_byte_range.trim_start(initial_read_window_offset);
         if !range.is_empty() {
             let (body_sender, body_receiver) = unbounded();
-            let request_reader_future = read_from_request(
+            let request_reader_future = try_read_from_request(
                 body_sender,
                 &mut self.backpressure_limiter,
                 self.client.clone(),
@@ -237,12 +232,10 @@ where
                 cache_key.clone(),
                 range.into(),
             );
-            let part_composer_future = part_composer.compose_parts(body_receiver);
-            try_join!(request_reader_future, part_composer_future)?;
+            let part_composer_future = part_composer.try_compose_parts(body_receiver);
+            join!(request_reader_future, part_composer_future);
         }
         part_composer.flush();
-
-        Ok(())
     }
 
     fn block_indices_for_byte_range(&self, range: &RequestRange) -> Range<BlockIndex> {
@@ -260,7 +253,6 @@ where
 struct CachingPartComposer<E: std::error::Error, Cache> {
     part_queue_producer: PartQueueProducer<E>,
     cache_key: ObjectId,
-    preferred_part_size: usize,
     original_range: RequestRange,
     block_index: u64,
     block_offset: u64,
@@ -273,23 +265,26 @@ where
     E: std::error::Error + Send + Sync,
     Cache: DataCache + Send + Sync,
 {
+    async fn try_compose_parts(&mut self, body_receiver: Receiver<RequestReaderOutput<E>>) {
+        if let Err(e) = self.compose_parts(body_receiver).await {
+            trace!(error=?e, "part stream task failed");
+            self.part_queue_producer.push(Err(e));
+        }
+    }
     async fn compose_parts(
         &mut self,
-        body_receiver: Receiver<RequestReaderOutput>,
+        body_receiver: Receiver<RequestReaderOutput<E>>,
     ) -> Result<(), PrefetchReadError<E>> {
         let key = self.cache_key.key();
         let block_size = self.cache.block_size();
 
         pin_mut!(body_receiver);
-        loop {
+        while let Some(result) = body_receiver.next().await {
             assert!(
                 self.buffer.len() < block_size as usize,
                 "buffer should be flushed when we get a full block"
             );
-            let Some((offset, body)) = body_receiver.next().await else {
-                break;
-            };
-
+            let (offset, body) = result?;
             let expected_offset = self.block_offset + self.buffer.len() as u64;
             if offset != expected_offset {
                 warn!(key, offset, expected_offset, "wrong offset for GetObject body part");
@@ -299,41 +294,39 @@ where
                 });
             }
 
-            // S3 doesn't provide checksum for us if the request range is not aligned to
-            // object part boundaries, so we're computing our own checksum here.
-            let mut body: ChecksummedBytes = Bytes::from(body).into();
-
-            // Return some bytes to the part queue even before we can fill an entire caching block because we want to
-            // start the feedback loop for the flow-control window.
-            //
-            // We need to do this because the read window might be enough to fetch "some data" from S3 but not the entire block.
-            // For example, consider that we got a file system read request with range 2MB to 4MB and we have to start
-            // reading from block_offset=0 and block_size=5MB. The first read window might have a range up to 4MB which is enough
-            // to serve the read request but if the prefetcher is not able to read anything it cannot tell the stream to move
-            // its read window.
-            //
-            // A side effect from this is delay on the cache updating which is actually good for performance but it makes testing
-            // a bit more complicated because the cache might not be updated immediately.
-            let part_range = self
-                .original_range
-                .trim_start(offset)
-                .trim_end(offset + body.len() as u64);
-            let trim_start = (part_range.start().saturating_sub(offset)) as usize;
-            let trim_end = (part_range.end().saturating_sub(offset)) as usize;
-            // Put to the part queue only if returned data is in the actual request range.
-            if trim_end > trim_start {
-                self.part_queue_producer.split_and_push(
-                    self.cache_key.clone(),
-                    part_range.start(),
-                    body.slice(trim_start..trim_end),
-                    self.preferred_part_size,
-                )?;
-            }
-
-            // Now we can fill the caching blocks.
+            // Split the body into blocks.
+            let mut body: Bytes = body.into();
+            let mut offset = offset;
             while !body.is_empty() {
                 let remaining = (block_size as usize).saturating_sub(self.buffer.len()).min(body.len());
-                let chunk = body.split_to(remaining);
+                let chunk: ChecksummedBytes = body.split_to(remaining).into();
+
+                // We need to return some bytes to the part queue even before we can fill an entire caching block because
+                // we want to start the feedback loop for the flow-control window.
+                //
+                // This is because the read window might be enough to fetch "some data" from S3 but not the entire block.
+                // For example, consider that we got a file system read request with range 2MB to 4MB and we have to start
+                // reading from block_offset=0 and block_size=5MB. The first read window might have a range up to 4MB which
+                // is enough to serve the read request but if the prefetcher is not able to read anything it cannot tell
+                // the stream to move its read window.
+                //
+                // A side effect from this is delay on the cache updating which is actually good for performance but it makes
+                // testing a bit more complicated because the cache might not be updated immediately.
+                let part_range = self
+                    .original_range
+                    .trim_start(offset)
+                    .trim_end(offset + chunk.len() as u64);
+                if !part_range.is_empty() {
+                    let trim_start = (part_range.start().saturating_sub(offset)) as usize;
+                    let trim_end = (part_range.end().saturating_sub(offset)) as usize;
+                    let part = Part::new(
+                        self.cache_key.clone(),
+                        part_range.start(),
+                        chunk.slice(trim_start..trim_end),
+                    );
+                    self.part_queue_producer.push(Ok(part));
+                }
+                offset += chunk.len() as u64;
                 if let Err(e) = self.buffer.extend(chunk) {
                     warn!(key, error=?e, "integrity check for body part failed");
                     return Err(e.into());
@@ -360,7 +353,7 @@ where
     }
 
     // Flush remaining data in the buffer to the cache
-    fn flush(&self) {
+    fn flush(self) {
         if !self.buffer.is_empty() {
             // If we still have data in the buffer, this must be the last block for this object,
             // which can be smaller than block_size (and ends at the end of the object).
@@ -378,7 +371,7 @@ where
                 &self.cache_key,
             );
             self.part_queue_producer.push(Ok(make_part(
-                self.buffer.clone(),
+                self.buffer,
                 self.block_index,
                 self.block_offset,
                 self.cache.block_size(),

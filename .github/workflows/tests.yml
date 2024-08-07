@@ -2,7 +2,7 @@ name: Tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "mem_limiter_perf" ]
   pull_request:
     branches: [ "main" ]
   merge_group:

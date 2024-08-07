@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1723029819243,
+  "lastUpdate": 1723059361977,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "distinct": true,
-          "id": "f74b830b35ae5dcd7f89af0393137ef9f1019119",
-          "message": "Test the benchmark\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2023-08-15T08:58:48Z",
-          "tree_id": "5b771d03ee2e69f6df43cc5046b1426c18f47033",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/f74b830b35ae5dcd7f89af0393137ef9f1019119"
-        },
-        "date": 1692090583187,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.076,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.192,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.197,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.592,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 81.2664123,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 72.3963614,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 34.3118298,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d3cd7a187e8cff8967fb99d2b04492cb1c3cbd2f",
+          "message": "Update NoSigningCredentials error message, add troubleshooting entry (#975)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-08-07T12:23:15Z",
+          "tree_id": "693c7ffef8137f8b9475cbf602ca3957f3a47edb",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/d3cd7a187e8cff8967fb99d2b04492cb1c3cbd2f"
+        },
+        "date": 1723059361130,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.043,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.133,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.102,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 10.181,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 155.3351736,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 43.2322511,
             "unit": "milliseconds"
           }
         ]

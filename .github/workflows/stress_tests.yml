@@ -1,0 +1,62 @@
+name: Stress tests
+
+# We use environments to require approval to run integration tests on PRs, but not on pushes to
+# `main` (which have been approved already since PRs are required for `main`).
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+      ref:
+        required: true
+        type: string
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  S3_BUCKET_NAME: ${{ vars.S3_BENCH_BUCKET_NAME }}
+  S3_REGION: ${{ vars.S3_BENCH_REGION }}
+  S3_BUCKET_TEST_PREFIX: ${{ vars.S3_BUCKET_BENCH_PREFIX || 'mountpoint-benchmark/' }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  mem-test:
+    name: Memory stress test, FUSE ${{ matrix.fuseVersion }})
+    runs-on: [self-hosted, linux, arm64]
+    # Run this workflow in a container
+    container:
+      image: public.ecr.aws/amazonlinux/amazonlinux:2023
+      options: --cap-add SYS_ADMIN --device /dev/fuse --security-opt apparmor:unconfined --memory=2560m
+
+    strategy:
+      fail-fast: false
+      matrix:
+        fuseVersion: [2, 3]
+    
+    steps:
+    - name: Install git
+      run: dnf install -y git
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ vars.ACTIONS_IAM_ROLE }}
+        aws-region: ${{ vars.S3_REGION }}
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.ref }}
+        submodules: true
+        persist-credentials: false
+    - name: Set up stable Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Install operating system dependencies
+      uses: ./.github/actions/install-dependencies
+      with:
+        fuseVersion: ${{ matrix.fuseVersion }}
+        run-as-root: true
+    - name: Run tests
+      run: cargo test

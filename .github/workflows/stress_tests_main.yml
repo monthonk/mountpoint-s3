@@ -1,0 +1,16 @@
+name: Stress tests
+
+on:
+  push:
+    branches: [ "mem_stress_test", "wf-changes/**" ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  stress-tests:
+    name: Stress tests
+    uses: ./.github/workflows/stress_tests.yml
+    with:
+      ref: ${{ github.sha }}

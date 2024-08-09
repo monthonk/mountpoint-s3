@@ -24,6 +24,7 @@ use mountpoint_s3_crt::io::event_loop::EventLoopGroup;
 use nix::sys::signal::Signal;
 use nix::unistd::ForkResult;
 use regex::Regex;
+use sysinfo::{RefreshKind, System};
 
 use crate::build_info;
 use crate::data_cache::{CacheLimit, DiskDataCache, DiskDataCacheConfig, ManagedCacheDir};
@@ -155,6 +156,15 @@ pub struct CliArgs {
         help_heading = CLIENT_OPTIONS_HEADER
     )]
     pub max_threads: u64,
+
+    #[clap(
+        long,
+        help = "Maximum memory usage target [default: 50% of total system memory with a minimum of 512 MiB]",
+        value_name = "MiB",
+        value_parser = value_parser!(u64).range(512..),
+        help_heading = CLIENT_OPTIONS_HEADER
+    )]
+    pub mem_limit_target_mb: Option<u64>,
 
     #[clap(
         long,
@@ -392,12 +402,14 @@ impl CliArgs {
             let mut filter = if self.debug {
                 String::from("debug")
             } else {
-                String::from("warn")
+                String::from("info")
             };
             let crt_verbosity = if self.debug_crt { "debug" } else { "off" };
             filter.push_str(&format!(",{}={}", AWSCRT_LOG_TARGET, crt_verbosity));
             if self.log_metrics {
                 filter.push_str(&format!(",{}=info", metrics::TARGET_NAME));
+            } else {
+                filter.push_str(&format!(",{}=off", metrics::TARGET_NAME));
             }
             filter
         };
@@ -737,6 +749,13 @@ where
     filesystem_config.allow_overwrite = args.allow_overwrite;
     filesystem_config.s3_personality = s3_personality;
     filesystem_config.server_side_encryption = ServerSideEncryption::new(args.sse, args.sse_kms_key_id);
+    filesystem_config.mem_limit = if let Some(mem_limit) = args.mem_limit_target_mb {
+        mem_limit * 1024 * 1024
+    } else {
+        const MINIMUM_MEM_LIMIT: u64 = 512 * 1024 * 1024;
+        let sys = System::new_with_specifics(RefreshKind::everything());
+        MINIMUM_MEM_LIMIT.max(sys.total_memory() / 2)
+    };
 
     // Written in this awkward way to force us to update it if we add new checksum types
     filesystem_config.use_upload_checksums = match args.upload_checksums {

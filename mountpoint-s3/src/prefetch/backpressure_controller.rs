@@ -1,7 +1,12 @@
 use std::ops::Range;
+use std::sync::Arc;
 
 use async_channel::{unbounded, Receiver, Sender};
+use humansize::make_format;
+use mountpoint_s3_client::ObjectClient;
 use tracing::trace;
+
+use crate::mem_limiter::MemoryLimiter;
 
 use super::PrefetchReadError;
 
@@ -12,11 +17,13 @@ pub enum BackpressureFeedbackEvent {
 }
 
 #[derive(Debug)]
-pub struct BackpressureController {
+pub struct BackpressureController<Client: ObjectClient> {
     read_window_updater: Sender<usize>,
     preferred_read_window_size: usize,
+    min_read_window_size: usize,
     max_read_window_size: usize,
     read_window_size_multiplier: usize,
+    read_part_size: usize,
     /// Upper bound of the current read window. The request can return data up to this
     /// offset *exclusively*. This value must be advanced to continue fetching new data.
     read_window_end_offset: u64,
@@ -26,6 +33,7 @@ pub struct BackpressureController {
     /// End offset for the request we want to apply backpressure. The request can return
     /// data up to this offset *exclusively*.
     request_end_offset: u64,
+    mem_limiter: Arc<MemoryLimiter<Client>>,
 }
 
 #[derive(Debug)]
@@ -48,22 +56,29 @@ pub struct BackpressureLimiter {
 /// [BackpressureController] will be given to the consumer side of the object stream.
 /// It can be used anywhere to set preferred read window size for the stream and tell the
 /// producer when its read window should be increased.
-pub fn new_backpressure_controller(
+pub fn new_backpressure_controller<Client: ObjectClient>(
     preferred_read_window_size: usize,
+    min_read_window_size: usize,
     max_read_window_size: usize,
     read_window_size_multiplier: usize,
+    read_part_size: usize,
     read_window_end_offset: u64,
     request_range: Range<u64>,
-) -> (BackpressureController, BackpressureLimiter) {
+    mem_limiter: Arc<MemoryLimiter<Client>>,
+) -> (BackpressureController<Client>, BackpressureLimiter) {
     let (read_window_updater, read_window_incrementing_queue) = unbounded();
+    mem_limiter.reserve(preferred_read_window_size as u64);
     let controller = BackpressureController {
         read_window_updater,
         preferred_read_window_size,
+        min_read_window_size,
         max_read_window_size,
         read_window_size_multiplier,
+        read_part_size,
         read_window_end_offset,
         next_read_offset: request_range.start,
         request_end_offset: request_range.end,
+        mem_limiter,
     };
     let limiter = BackpressureLimiter {
         read_window_incrementing_queue,
@@ -72,7 +87,7 @@ pub fn new_backpressure_controller(
     (controller, limiter)
 }
 
-impl BackpressureController {
+impl<Client: ObjectClient> BackpressureController<Client> {
     pub fn read_window_end_offset(&self) -> u64 {
         self.read_window_end_offset
     }
@@ -84,9 +99,18 @@ impl BackpressureController {
             BackpressureFeedbackEvent::DataRead(length) => {
                 self.next_read_offset += length as u64;
                 // Increment the read window only if the remaining window reaches some threshold i.e. half of it left.
-                if self.remaining_window() < (self.preferred_read_window_size / 2)
+                while self.remaining_window() < (self.preferred_read_window_size / 2)
                     && self.read_window_end_offset < self.request_end_offset
                 {
+                    let available_mem = self.mem_limiter.available_mem();
+                    // If the preferred read window size is still large and available memory is getting low we will try to scale it down.
+                    if self.preferred_read_window_size > self.min_read_window_size
+                        && available_mem < self.preferred_read_window_size as u64
+                    {
+                        self.try_scaling_down();
+                        continue;
+                    }
+
                     let new_read_window_end_offset = self
                         .next_read_offset
                         .saturating_add(self.preferred_read_window_size as u64)
@@ -125,15 +149,48 @@ impl BackpressureController {
     // Try scaling up preferred read window size with a multiplier configured at initialization.
     fn try_scaling_up(&mut self) {
         if self.preferred_read_window_size < self.max_read_window_size {
-            let new_read_window_size =
-                (self.preferred_read_window_size * self.read_window_size_multiplier).min(self.max_read_window_size);
-            trace!(
-                current_size = self.preferred_read_window_size,
-                new_size = new_read_window_size,
-                "scaling up preferred read window"
+            let new_read_window_size = self.preferred_read_window_size * self.read_window_size_multiplier;
+            // Also align the new read window size to the client part size
+            let new_read_window_size = align(new_read_window_size, self.read_part_size, false).min(self.max_read_window_size);
+
+            // Only scale up when there is enough memory
+            let to_increase = (new_read_window_size - self.preferred_read_window_size) as u64;
+            if to_increase <= self.mem_limiter.available_mem() {
+                let formatter = make_format(humansize::BINARY);
+                tracing::info!(
+                    current_size = formatter(self.preferred_read_window_size),
+                    new_size = formatter(new_read_window_size),
+                    "scaling up preferred read window"
+                );
+                self.mem_limiter.release(self.preferred_read_window_size as u64);
+                self.mem_limiter.reserve(new_read_window_size as u64);
+                self.preferred_read_window_size = new_read_window_size;
+            }
+        }
+    }
+
+    pub fn try_scaling_down(&mut self) {
+        if self.preferred_read_window_size > self.min_read_window_size {
+            let new_read_window_size = self.preferred_read_window_size / self.read_window_size_multiplier;
+            // Also align the new read window size to the client part size
+            let new_read_window_size = align(new_read_window_size, self.read_part_size, false).max(self.min_read_window_size);
+
+            let formatter = make_format(humansize::BINARY);
+            tracing::info!(
+                current_size = formatter(self.preferred_read_window_size),
+                new_size = formatter(new_read_window_size),
+                "scaling down read window"
             );
+            self.mem_limiter.release(self.preferred_read_window_size as u64);
+            self.mem_limiter.reserve(new_read_window_size as u64);
             self.preferred_read_window_size = new_read_window_size;
         }
+    }
+}
+
+impl<Client: ObjectClient> Drop for BackpressureController<Client> {
+    fn drop(&mut self) {
+        self.mem_limiter.release(self.preferred_read_window_size as u64);
     }
 }
 
@@ -176,5 +233,20 @@ impl BackpressureLimiter {
             }
         }
         Ok(Some(self.read_window_end_offset))
+    }
+}
+
+/// Try to align the given read window size to the part boundaries.
+/// The `trim_only` flags controls whether the range is only trimmed down to
+/// part boundaries or is allowed to grow wider.
+fn align(read_window_size: usize, part_size: usize, trim_only: bool) -> usize {
+    let part_alignment = part_size;
+    let remainder = read_window_size % part_alignment;
+    if trim_only || remainder == 0 {
+        // trim it to the previous part boundary
+        read_window_size - remainder
+    } else {
+        // extend it to the next part boundary
+        read_window_size + (part_alignment - remainder)
     }
 }

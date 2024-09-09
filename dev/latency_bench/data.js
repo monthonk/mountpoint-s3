@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725351057888,
+  "lastUpdate": 1725866663743,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "bornholt@amazon.com",
-            "name": "James Bornholt",
-            "username": "jamesbornholt"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "b9f7e913fb2e0ddf5beff1f1f3121b4ca1a20601",
-          "message": "Bump AWS SDKs to latest version (#476)\n\nThis removes webpki from our dependencies to fix this: https://rustsec.org/advisories/RUSTSEC-2023-0052\n\nSigned-off-by: James Bornholt <bornholt@amazon.com>",
-          "timestamp": "2023-08-23T21:28:50Z",
-          "tree_id": "d2a7a159ef1bbf9e5ea3f5e7cf4e672fe26c30d9",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/b9f7e913fb2e0ddf5beff1f1f3121b4ca1a20601"
-        },
-        "date": 1692868614357,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.082,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.196,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.197,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 11.626,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 121.7410648,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 67.2989225,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 49.845347200000006,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6d498852520ba2f22ca3c76409f7b3faad9e2106",
+          "message": "Update nix dependency from 0.27.1 to 0.29.0 (#1003)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-09-06T17:00:41Z",
+          "tree_id": "1afbc653d279290796a7a6ab38338c500265fe29",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/6d498852520ba2f22ca3c76409f7b3faad9e2106"
+        },
+        "date": 1725866662972,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.051,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.134,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.127,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 10.179,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 136.863243,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 65.2982374,
             "unit": "milliseconds"
           }
         ]

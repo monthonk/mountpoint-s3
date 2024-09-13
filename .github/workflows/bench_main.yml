@@ -2,7 +2,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [ "main", "wf-changes/**" ]
+    branches: [ "mem_limiter_perf", "wf-changes/**" ]
   schedule:
     - cron: "0 2 * * *" # Daily at 02:00 UTC
 

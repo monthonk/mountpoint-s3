@@ -65,6 +65,8 @@ impl FromStr for ETag {
 
 /// Memory usage stats for the client
 pub struct MemoryUsageStats {
+    /// Allocated memory
+    pub mem_allocated: u64,
     /// Reserved memory for the client. For [S3CrtClient], this value is a sum of primary storage
     /// and secondary storage reserved memory.
     pub mem_reserved: u64,

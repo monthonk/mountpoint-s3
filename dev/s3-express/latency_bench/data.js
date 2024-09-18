@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726568388375,
+  "lastUpdate": 1726671122193,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "7155555a365cd2b8e4b330c2b16cff3d1b56cce8",
-          "message": "Release v1.7.1 (#912)\n\n* Release v1.7.1\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n* Update changelog\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n---------\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2024-06-14T08:55:26Z",
-          "tree_id": "d8b44fa654789f6fb2ab667f0775f9f2796c8100",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/7155555a365cd2b8e4b330c2b16cff3d1b56cce8"
-        },
-        "date": 1718359027246,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.353,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.854,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.864,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 12.192,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 130.6737824,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 124.3610798,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 10.3113095,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "burakvar@amazon.co.uk",
+            "name": "Burak",
+            "username": "unexge"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ba23586e6defdd5621adb3b1c213d0793af2ad23",
+          "message": "Update CRT submodules to latest releases (#1019)\n\n* Update CRT submodules to latest releases\n\nSigned-off-by: Burak Varlı <burakvar@amazon.co.uk>\n\n* Update CHANGELOG for CRT related crates\n\nSigned-off-by: Burak Varlı <burakvar@amazon.co.uk>\n\n---------\n\nSigned-off-by: Burak Varlı <burakvar@amazon.co.uk>",
+          "timestamp": "2024-09-18T11:56:57Z",
+          "tree_id": "576c8eb0b0ab03483414be62c3a170f12d37fb7b",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/ba23586e6defdd5621adb3b1c213d0793af2ad23"
+        },
+        "date": 1726671121275,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.042,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.185,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 0.853,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 7.326,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 12.1120731,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 11.328322400000001,
             "unit": "milliseconds"
           }
         ]

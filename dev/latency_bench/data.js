@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726671159489,
+  "lastUpdate": 1726676155823,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "djonesoa@amazon.com",
-            "name": "Daniel Carl Jones",
-            "username": "dannycjones"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "4db11adabc77c365d052ad99b4d64fd19b7e73bb",
-          "message": "Cancel unused in-flight prefetch tasks (#505)\n\nPreviously, mountpoint-s3 would not cancel prefetch tasks that it was going to ignore.\nInstead, they would continue to be polled by the executor despite the results never being checked.\nThis change ensures that the task handles are dropped which cancels the task/future.\n\nIn the future, we may want to retain some of these tasks where the prefetcher may still be able to make use of them.\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
-          "timestamp": "2023-09-06T16:52:01Z",
-          "tree_id": "a0e86d27049a74a659b94beb839ff541891b1e61",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/4db11adabc77c365d052ad99b4d64fd19b7e73bb"
-        },
-        "date": 1694101992568,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.077,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.159,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.279,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 13.285,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 145.986635,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 67.1738899,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 49.6170521,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "532d36450cb0b95b5938e5eb1a00e8379c15115d",
+          "message": "test\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2024-09-18T16:05:55Z",
+          "tree_id": "dae8742544f29b6b8bafe71c921cd908e902a9a2",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/532d36450cb0b95b5938e5eb1a00e8379c15115d"
+        },
+        "date": 1726676154991,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.046,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.144,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.107,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 10.856,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 295.5688266,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 88.1713635,
             "unit": "milliseconds"
           }
         ]

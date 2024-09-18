@@ -4,125 +4,6 @@ window.BENCHMARK_DATA = {
       {
         "commit": {
           "author": {
-            "email": "monthonk@amazon.com",
-            "name": "Monthon Klongklaew",
-            "username": "monthonk"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "7155555a365cd2b8e4b330c2b16cff3d1b56cce8",
-          "message": "Release v1.7.1 (#912)\n\n* Release v1.7.1\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n* Update changelog\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n---------\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
-          "timestamp": "2024-06-14T08:55:26Z",
-          "tree_id": "d8b44fa654789f6fb2ab667f0775f9f2796c8100",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/7155555a365cd2b8e4b330c2b16cff3d1b56cce8"
-        },
-        "date": 1718364560864,
-        "tool": "customBiggerIsBetter",
-        "benches": [
-          {
-            "name": "random_read_four_threads_direct_io",
-            "value": 4.16875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_four_threads_direct_io_small_file",
-            "value": 18.16376953125,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_four_threads",
-            "value": 3.82607421875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_four_threads_small_file",
-            "value": 19.509375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_direct_io",
-            "value": 1.06884765625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_direct_io_small_file",
-            "value": 4.78046875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read",
-            "value": 1.00107421875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "random_read_small_file",
-            "value": 3.916796875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads_direct_io",
-            "value": 649.584375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads_direct_io_small_file",
-            "value": 100.18193359375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads",
-            "value": 13.59990234375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_four_threads_small_file",
-            "value": 30.84697265625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_direct_io",
-            "value": 225.415234375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_direct_io_small_file",
-            "value": 25.23662109375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read",
-            "value": 200.9103515625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "seq_read_skip_17m",
-            "value": 183.7841796875,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_read_small_file",
-            "value": 25.3884765625,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_write_direct_io",
-            "value": 1328.74609375,
-            "unit": "MiB/s"
-          },
-          {
-            "name": "sequential_write",
-            "value": 1028.94990234375,
-            "unit": "MiB/s"
-          }
-        ]
-      },
-      {
-        "commit": {
-          "author": {
             "email": "alexpax@amazon.co.uk",
             "name": "Alessandro Passaro",
             "username": "passaro"
@@ -2380,9 +2261,128 @@ window.BENCHMARK_DATA = {
             "unit": "MiB/s"
           }
         ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "532d36450cb0b95b5938e5eb1a00e8379c15115d",
+          "message": "test\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2024-09-18T16:05:55Z",
+          "tree_id": "dae8742544f29b6b8bafe71c921cd908e902a9a2",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/532d36450cb0b95b5938e5eb1a00e8379c15115d"
+        },
+        "date": 1726677122733,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "random_read_four_threads_direct_io",
+            "value": 3.3388671875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads_direct_io_small_file",
+            "value": 28.88818359375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads",
+            "value": 3.068359375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_four_threads_small_file",
+            "value": 36.38525390625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_direct_io",
+            "value": 0.98828125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_direct_io_small_file",
+            "value": 4.93017578125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read",
+            "value": 0.7451171875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "random_read_small_file",
+            "value": 5.30419921875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_direct_io",
+            "value": 5080.81787109375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_direct_io_small_file",
+            "value": 149.62646484375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads",
+            "value": 2271.14892578125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_four_threads_small_file",
+            "value": 55.28955078125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_direct_io",
+            "value": 1495.15625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_direct_io_small_file",
+            "value": 41.10205078125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read",
+            "value": 1177.6279296875,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 1312.30126953125,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_read_small_file",
+            "value": 44.2587890625,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_write_direct_io",
+            "value": 1372.75927734375,
+            "unit": "MiB/s"
+          },
+          {
+            "name": "sequential_write",
+            "value": 893.083984375,
+            "unit": "MiB/s"
+          }
+        ]
       }
     ]
   },
-  "lastUpdate": 1726676717361,
+  "lastUpdate": 1726677123537,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3"
 }

@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726691686244,
+  "lastUpdate": 1726737092625,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "alexpax@amazon.co.uk",
-            "name": "Alessandro Passaro",
-            "username": "passaro"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "73328cc64a2dbca78e879730d4d264aedd881c60",
-          "message": "Silence unnecessary-cast clippy error on linux arm64 (#539)\n\nOn linux arm64 `::libc::c_char` (returned by `aws_log_subject_name`) is defined as `u8`,\nso a cast to `u8` is flagged as unnecessary by clippy, but it is required on other platforms.\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
-          "timestamp": "2023-09-28T17:55:20Z",
-          "tree_id": "a0ce5d536b517b256bd659209ff23308db318e09",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/73328cc64a2dbca78e879730d4d264aedd881c60"
-        },
-        "date": 1696251917083,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.07,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.162,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.284,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 12.841,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 150.4147193,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 73.3794703,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 39.9747371,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f430895a096e3ebfe5d0fec59dece36910e133e6",
+          "message": "Update CRT submodules to latest releases (#1024)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-09-19T08:45:10Z",
+          "tree_id": "cbe85079414d977c48dc8bdcdcefe7569d7fe5ec",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/f430895a096e3ebfe5d0fec59dece36910e133e6"
+        },
+        "date": 1726737091855,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.053,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.143,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 1.071,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 10.759,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 175.8843859,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 43.9924771,
             "unit": "milliseconds"
           }
         ]

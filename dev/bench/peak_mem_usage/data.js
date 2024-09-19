@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726692660116,
+  "lastUpdate": 1726752477670,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -237,6 +237,125 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_write",
             "value": 428,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "distinct": true,
+          "id": "f090d6f531dd2ef8b0b2300675b3886954b7997b",
+          "message": "test\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2024-09-19T13:01:01Z",
+          "tree_id": "6cbe95f252c6c66d37d52d4d216e31ba58625fea",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/f090d6f531dd2ef8b0b2300675b3886954b7997b"
+        },
+        "date": 1726752477152,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "rand_read_4t_direct",
+            "value": 93,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 322,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 99,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 339,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 72,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 228,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 68,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 230,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 14194,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 348,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 15696,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 410,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 3300,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 247,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 3174,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 3661,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 235,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write_direct",
+            "value": 629,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write",
+            "value": 379,
             "unit": "MiB"
           }
         ]

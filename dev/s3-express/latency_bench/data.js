@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726740923696,
+  "lastUpdate": 1726751401520,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "alexpax@amazon.co.uk",
-            "name": "Alessandro Passaro",
-            "username": "passaro"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "becbd554c6d8e3e7a9751f16b61e3f643f682a83",
-          "message": "Move mapping of PrefetchReadErrors into the fs::error module (#750)\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
-          "timestamp": "2024-07-05T13:10:52Z",
-          "tree_id": "52fd397cb689399ac727682e24c87302c2186bea",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/becbd554c6d8e3e7a9751f16b61e3f643f682a83"
-        },
-        "date": 1720188044253,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.346,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.832,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.918,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 12.525,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 126.5091082,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 112.716998,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 10.694034199999999,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7f7e7f0558c7d9fe62b6f21295d2df3a2a2ea549",
+          "message": "Expose `s3.client.buffer_pool.forced_used` metric (#1025)\n\n* Expose `s3.client.buffer_pool.forced_used` metric\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n* Update changelog\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n---------\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>",
+          "timestamp": "2024-09-19T10:06:42Z",
+          "tree_id": "b273d49ab7246b1f21f4737bb78966cd81af1217",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/7f7e7f0558c7d9fe62b6f21295d2df3a2a2ea549"
+        },
+        "date": 1726751400375,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.038,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.182,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 0.861,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 7.358,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 11.1217883,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 10.472930300000002,
             "unit": "milliseconds"
           }
         ]

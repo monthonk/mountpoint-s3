@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726691694302,
+  "lastUpdate": 1726737094369,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "ahmarsu@amazon.co.uk",
-            "name": "ahmarsuhail",
-            "username": "ahmarsuhail"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": false,
-          "id": "cc8d3094f1a43df420470204d78c52670cd5f7d1",
-          "message": "include test files in cargo (#924)\n\nSigned-off-by: Ahmar Suhail <ahmarsu@amazon.co.uk>",
-          "timestamp": "2024-06-26T16:14:41Z",
-          "tree_id": "e1302c0b125475220680150b56554cf761acca9e",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/cc8d3094f1a43df420470204d78c52670cd5f7d1"
-        },
-        "date": 1719571201728,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.341,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.719,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 1.874,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 12.37,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 141.65456890000002,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 106.1203529,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 10.833815300000001,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f430895a096e3ebfe5d0fec59dece36910e133e6",
+          "message": "Update CRT submodules to latest releases (#1024)\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-09-19T08:45:10Z",
+          "tree_id": "cbe85079414d977c48dc8bdcdcefe7569d7fe5ec",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/f430895a096e3ebfe5d0fec59dece36910e133e6"
+        },
+        "date": 1726737092223,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.04,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.183,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 0.859,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 7.348,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 10.9867715,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 11.076486,
             "unit": "milliseconds"
           }
         ]

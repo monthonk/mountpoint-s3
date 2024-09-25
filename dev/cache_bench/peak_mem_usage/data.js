@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727191117435,
+  "lastUpdate": 1727263668709,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -435,6 +435,115 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_read_small",
             "value": 209.8046875,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f92bf6c41e8b75f7e51770dc69afcc8332e33569",
+          "message": "Add support for concurrent downloads to prefetch_benchmark example (#1022)\n\n* Fix prefetch_benchmark example\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Add support for concurrent downloads to prefetch_benchmark example\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Use CRT runtime\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n---------\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2024-09-24T17:05:39Z",
+          "tree_id": "f06430ab3fac7981589aacd6abaabcb9473e3d2d",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/f92bf6c41e8b75f7e51770dc69afcc8332e33569"
+        },
+        "date": 1727263668166,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "rand_read_4t_direct",
+            "value": 3255.93359375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 315.3515625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 3073.5625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 323.171875,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 3282.4375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 234.4140625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 3359.0625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 195.109375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 44239.30859375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 336.671875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 9161.6875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 359.76171875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 26533.4140625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 217.6796875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 28651.81640625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 3552.29296875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 213.6328125,
             "unit": "MiB"
           }
         ]

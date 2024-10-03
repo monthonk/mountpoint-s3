@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727865309032,
+  "lastUpdate": 1727975630265,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -1070,6 +1070,125 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_write",
             "value": 160.78515625,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c144755df4693218e694ad77b86aadd94eee33a",
+          "message": "Add random 6-character suffix to log file names (#1041)\n\n* Add PID to log file names if log file already exists\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>\n\n* Update log filenames to always include some random string following the timestamp\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>\n\n* Rename logging_config fn to make_logging_config\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>\n\n* Move make_logging_config back to method of CliArgs\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>\n\n---------\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-10-03T10:36:59Z",
+          "tree_id": "1ee8fb9471da0c08704765e07b7d52ad3f28bd89",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/8c144755df4693218e694ad77b86aadd94eee33a"
+        },
+        "date": 1727975630229,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "rand_read_4t_direct",
+            "value": 150.12890625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 398.22265625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 218.90625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 435.0390625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 85.140625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 323.51953125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 87.1796875,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 329.5625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 38128.5859375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 382.4453125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 33720.125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 499.5,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 12325.578125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 266.078125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 10863.9296875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 12339.41796875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 261.34765625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write_direct",
+            "value": 261.09765625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write",
+            "value": 144.54296875,
             "unit": "MiB"
           }
         ]

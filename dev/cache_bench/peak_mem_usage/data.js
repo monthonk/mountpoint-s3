@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1727975930651,
+  "lastUpdate": 1728052612483,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -1089,6 +1089,115 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_read_small",
             "value": 214.171875,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "burakvar@amazon.co.uk",
+            "name": "Burak",
+            "username": "unexge"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2fa3a8f1cd06f6fb48a36137f05e9d936b951f6a",
+          "message": "Update CRT submodules to latest releases (#1027)\n\nSigned-off-by: Burak Varlı <burakvar@amazon.co.uk>",
+          "timestamp": "2024-10-04T12:33:12Z",
+          "tree_id": "d8fcc77fb4d2f91dda2481013d14462d16a28b9e",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/2fa3a8f1cd06f6fb48a36137f05e9d936b951f6a"
+        },
+        "date": 1728052612448,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "rand_read_4t_direct",
+            "value": 3231.86328125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 337.4765625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 3221.328125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 336.18359375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 3428.6953125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 244.98828125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 3279.75,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 213.5703125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 35630.9375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 345.1015625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 3538.50390625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 369,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 3330.8515625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 209.6015625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 3431.359375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 3379.734375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 207.734375,
             "unit": "MiB"
           }
         ]

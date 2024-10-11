@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728052348332,
+  "lastUpdate": 1728648713982,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -1308,6 +1308,125 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_write",
             "value": 160.0234375,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "monthonk@amazon.com",
+            "name": "Monthon Klongklaew",
+            "username": "monthonk"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0415b5c9e9e0be906ce17446834f2aadc2655b79",
+          "message": "Update documentation related to the prefetcher (#1049)\n\n* Update documentation related to the prefetcher\n\nUpdate changelog to include changes in the prefetcher and document the\nunstable configuration to set maximum prefetch window size.\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n* PR comments\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n* Change wording\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n* Apply PR suggestion\n\nCo-authored-by: Daniel Carl Jones <danny@danielcarl.info>\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\n\n---------\n\nSigned-off-by: Monthon Klongklaew <monthonk@amazon.com>\nCo-authored-by: Daniel Carl Jones <danny@danielcarl.info>",
+          "timestamp": "2024-10-10T17:28:26Z",
+          "tree_id": "958c3f335cc3f766fe9bcb55350473a7d9b75f1f",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/0415b5c9e9e0be906ce17446834f2aadc2655b79"
+        },
+        "date": 1728648713948,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "rand_read_4t_direct",
+            "value": 148.03515625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 392.53515625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 212.0390625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 447.90625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 83.90625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 325.9140625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 94.30078125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 324.2578125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 35475.6328125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 386.625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 41165,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 486.64453125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 12966.30078125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 263.93359375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 12884.0703125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 9969.7265625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 261.6640625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write_direct",
+            "value": 243.984375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write",
+            "value": 153.70703125,
             "unit": "MiB"
           }
         ]

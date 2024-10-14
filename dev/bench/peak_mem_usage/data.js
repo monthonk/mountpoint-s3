@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728648710888,
+  "lastUpdate": 1728922578615,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
@@ -1427,6 +1427,125 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_write",
             "value": 413.296875,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ea9c7ed421b4fa0878b9f680da5d2b5b96c77eb",
+          "message": "Add support for single PutObject in mountpoint-s3-client (#1046)\n\n* Reintroduce the CRT InputStream as an option for the Message body\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Implement put_object\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Address PR feedback\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Tidy up comments and tests on InputStream\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Add comments to PutObjectTrailingChecksums and S3Operation\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n* Introduce separate params type\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>\n\n---------\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2024-10-11T21:40:18Z",
+          "tree_id": "36ba1fef659d9a9b638854ce10fc9e95e08ab5f9",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/9ea9c7ed421b4fa0878b9f680da5d2b5b96c77eb"
+        },
+        "date": 1728922578580,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "rand_read_4t_direct",
+            "value": 105.5234375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 395.5859375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 115.3359375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 415.03515625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 80.98046875,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 324.03125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 82.6171875,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 329.45703125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 31127.21875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 455.953125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 47786.9296875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 539.78515625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 10465.8203125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 279.8125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 9324.94140625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 10173.5625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 274.1484375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write_direct",
+            "value": 775.015625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write",
+            "value": 489.37109375,
             "unit": "MiB"
           }
         ]

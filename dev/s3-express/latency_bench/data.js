@@ -1,62 +1,8 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1728916963090,
+  "lastUpdate": 1729772318803,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Benchmark": [
-      {
-        "commit": {
-          "author": {
-            "email": "vladvolodkin@gmail.com",
-            "name": "Volodkin Vladislav",
-            "username": "vladem"
-          },
-          "committer": {
-            "email": "noreply@github.com",
-            "name": "GitHub",
-            "username": "web-flow"
-          },
-          "distinct": true,
-          "id": "9ed8b6243f4511e2013b2f4303a9197c3ddd4071",
-          "message": "Release 1.9.0 (#1016)\n\nSigned-off-by: Vlad Volodkin <vlaad@amazon.com>\nCo-authored-by: Vlad Volodkin <vlaad@amazon.com>",
-          "timestamp": "2024-09-13T13:44:17Z",
-          "tree_id": "74c50d58f8bd92175dae44d35c32b1aac022a675",
-          "url": "https://github.com/monthonk/mountpoint-s3/commit/9ed8b6243f4511e2013b2f4303a9197c3ddd4071"
-        },
-        "date": 1726474735021,
-        "tool": "customSmallerIsBetter",
-        "benches": [
-          {
-            "name": "readdir_100",
-            "value": 0.043,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_1000",
-            "value": 0.187,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_10000",
-            "value": 0.858,
-            "unit": "seconds"
-          },
-          {
-            "name": "readdir_100000",
-            "value": 7.58,
-            "unit": "seconds"
-          },
-          {
-            "name": "time_to_first_byte_read",
-            "value": 12.7499529,
-            "unit": "milliseconds"
-          },
-          {
-            "name": "time_to_first_byte_read_small_file",
-            "value": 12.8148309,
-            "unit": "milliseconds"
-          }
-        ]
-      },
       {
         "commit": {
           "author": {
@@ -1079,6 +1025,60 @@ window.BENCHMARK_DATA = {
           {
             "name": "time_to_first_byte_read_small_file",
             "value": 11.7414692,
+            "unit": "milliseconds"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "djonesoa@amazon.com",
+            "name": "Daniel Carl Jones",
+            "username": "dannycjones"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4dc8e7db1754e543977eeb32ee6670824d29dd44",
+          "message": "Remove use of ObjectInfo in S3 client HeadObject response (#1058)\n\n* Remove use of ObjectInfo in S3 client HeadObject response\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>\n\n* Change HeadObjectResult etag field from String to ETag\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>\n\n---------\n\nSigned-off-by: Daniel Carl Jones <djonesoa@amazon.com>",
+          "timestamp": "2024-10-24T08:02:29Z",
+          "tree_id": "a811bc5dd139884d431dc5351357eec29eac1307",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/4dc8e7db1754e543977eeb32ee6670824d29dd44"
+        },
+        "date": 1729772318015,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "readdir_100",
+            "value": 0.044,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_1000",
+            "value": 0.183,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_10000",
+            "value": 0.863,
+            "unit": "seconds"
+          },
+          {
+            "name": "readdir_100000",
+            "value": 8.097,
+            "unit": "seconds"
+          },
+          {
+            "name": "time_to_first_byte_read",
+            "value": 11.3837642,
+            "unit": "milliseconds"
+          },
+          {
+            "name": "time_to_first_byte_read_small_file",
+            "value": 11.344030199999999,
             "unit": "milliseconds"
           }
         ]

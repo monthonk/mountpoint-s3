@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1733318955274,
+  "lastUpdate": 1733421335042,
   "repoUrl": "https://github.com/monthonk/mountpoint-s3",
   "entries": {
     "Throughput Benchmark - Peak Memory Usage (S3 Standard)": [
@@ -2186,6 +2186,140 @@ window.BENCHMARK_DATA = {
           {
             "name": "seq_write",
             "value": 580.43359375,
+            "unit": "MiB"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "alexpax@amazon.co.uk",
+            "name": "Alessandro Passaro",
+            "username": "passaro"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "993b0d42c0b172fb82fea39ac3964a1b3c74d4cf",
+          "message": "Refactor incremental upload queue (#1181)\n\nInternal refactor of the append queue for incremental uploads. Splits up\nthe initial `HeadObject` request and return the checksum algorithm of\nthe existing object separately from the `PutObject` responses.\n\n### Does this change impact existing behavior?\n\nNo, internal change only.\n\n### Does this change need a changelog entry?\n\nNo.\n\n---\n\nBy submitting this pull request, I confirm that my contribution is made\nunder the terms of the Apache 2.0 license and I agree to the terms of\nthe [Developer Certificate of Origin\n(DCO)](https://developercertificate.org/).\n\n---------\n\nSigned-off-by: Alessandro Passaro <alexpax@amazon.co.uk>",
+          "timestamp": "2024-12-05T11:15:47Z",
+          "tree_id": "f65c931aa350f5cc45a85c9b01e0cc8889a9ed3f",
+          "url": "https://github.com/monthonk/mountpoint-s3/commit/993b0d42c0b172fb82fea39ac3964a1b3c74d4cf"
+        },
+        "date": 1733421335005,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "mix_1r4w",
+            "value": 11330.671875,
+            "unit": "MiB"
+          },
+          {
+            "name": "mix_2r2w",
+            "value": 20157.3671875,
+            "unit": "MiB"
+          },
+          {
+            "name": "mix_4r1w",
+            "value": 36657.65625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct",
+            "value": 91.00390625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_direct_small",
+            "value": 359.7734375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t",
+            "value": 88.953125,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_4t_small",
+            "value": 360.34375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct",
+            "value": 74.71875,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_direct_small",
+            "value": 307.02734375,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read",
+            "value": 76.44140625,
+            "unit": "MiB"
+          },
+          {
+            "name": "rand_read_small",
+            "value": 304.5625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct",
+            "value": 34941.33984375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_direct_small",
+            "value": 401.48828125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t",
+            "value": 35429.96484375,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_4t_small",
+            "value": 401.04296875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct",
+            "value": 6994.94921875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_direct_small",
+            "value": 262.328125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read",
+            "value": 9872.3203125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_skip_17m",
+            "value": 12072.0703125,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_read_small",
+            "value": 260.625,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write_direct",
+            "value": 1052.76171875,
+            "unit": "MiB"
+          },
+          {
+            "name": "seq_write",
+            "value": 593.875,
             "unit": "MiB"
           }
         ]

@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use dashmap::DashMap;
 use metrics::{Key, Metadata, Recorder};
+use metrics_exporter_prometheus::PrometheusBuilder;
+use metrics_util::MetricKindMask;
 use sysinfo::{get_current_pid, MemoryRefreshKind, ProcessRefreshKind, ProcessesToUpdate, System};
 
 use crate::sync::mpsc::{channel, RecvTimeoutError, Sender};
@@ -61,8 +63,17 @@ pub fn install() -> MetricsSinkHandle {
         handle: Some(publisher_thread),
     };
 
-    let recorder = MetricsRecorder { sink };
-    metrics::set_global_recorder(recorder).unwrap();
+    let _recorder = MetricsRecorder { sink };
+    // metrics::set_global_recorder(recorder).unwrap();
+
+    let builder = PrometheusBuilder::new();
+    builder
+        .idle_timeout(
+            MetricKindMask::COUNTER | MetricKindMask::HISTOGRAM,
+            Some(Duration::from_secs(10)),
+        )
+        .install()
+        .expect("failed to install Prometheus recorder");
 
     handle
 }

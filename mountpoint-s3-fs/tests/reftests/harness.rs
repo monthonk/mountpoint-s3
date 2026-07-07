@@ -17,8 +17,8 @@ use fuser::FileType;
 use futures::future::{BoxFuture, FutureExt};
 use mountpoint_s3_client::ObjectClient;
 use mountpoint_s3_client::mock_client::{MockClient, MockObject};
-use mountpoint_s3_fs::fs::{CacheConfig, FUSE_ROOT_INODE, InodeNo, OpenFlags, ToErrno};
-use mountpoint_s3_fs::s3::Prefix;
+use mountpoint_s3_fs::fs::{CacheConfig, FUSE_ROOT_INODE, InodeNo, OpenFlags, RenameFlags, ToErrno};
+use mountpoint_s3_fs::s3::{Prefix, S3Personality};
 use mountpoint_s3_fs::{S3Filesystem, S3FilesystemConfig};
 use proptest::prelude::*;
 use proptest_derive::Arbitrary;
@@ -56,6 +56,14 @@ pub enum Op {
 
     /// Remove a file
     UnlinkFile(DirectoryIndex, ChildIndex),
+
+    /// Rename a file via Mountpoint `rename` (copy-rename on Standard / general purpose buckets
+    /// when the harness enables `--allow-copy-rename` equivalent config).
+    ///
+    /// Source is an existing child of [DirectoryIndex]; destination is under another (or the same)
+    /// directory with a new [ValidName]. Directory renames and local (uncommitted) files are
+    /// expected to fail; remote file renames update the reference model on success.
+    RenameFile(DirectoryIndex, ChildIndex, DirectoryIndex, ValidName),
 
     /// Create a local directory
     CreateDirectory(DirectoryIndex, ValidName),
@@ -246,6 +254,15 @@ impl Harness {
                 }
                 Op::UnlinkFile(directory_index, file_index) => {
                     self.perform_unlink_file(*directory_index, *file_index).await;
+                }
+                Op::RenameFile(src_directory_index, src_child_index, dst_directory_index, dst_name) => {
+                    self.perform_rename_file(
+                        *src_directory_index,
+                        *src_child_index,
+                        *dst_directory_index,
+                        &dst_name.0,
+                    )
+                    .await;
                 }
                 Op::CreateDirectory(directory_index, name) => {
                     self.perform_create_directory(*directory_index, &name.0).await;
@@ -529,6 +546,100 @@ impl Harness {
                 unlink.expect("should be able to unlink remote file");
                 self.reference.remove_remote_file(full_path);
             }
+        }
+    }
+
+    /// Rename a file (copy-rename path when enabled for Standard personality).
+    async fn perform_rename_file(
+        &mut self,
+        src_directory_index: DirectoryIndex,
+        src_child_index: ChildIndex,
+        dst_directory_index: DirectoryIndex,
+        dst_name: &str,
+    ) {
+        let src_parent_path = src_directory_index.get(&self.reference).as_ref().to_owned();
+        let Some(Node::Directory {
+            children: src_children, ..
+        }) = self.reference.lookup(&src_parent_path)
+        else {
+            panic!("source directory must already exist");
+        };
+        let Some((src_name, src_node)) = src_child_index.get(src_children) else {
+            return;
+        };
+        let src_name = src_name.to_owned();
+        let src_node = src_node.clone();
+        let src_full_path = src_parent_path.join(&src_name);
+
+        let dst_parent_path = dst_directory_index.get(&self.reference).as_ref().to_owned();
+        let dst_full_path = dst_parent_path.join(dst_name);
+
+        // No-op / self-rename is not interesting and can confuse the remote model.
+        if src_full_path == dst_full_path {
+            return;
+        }
+
+        trace!(src=?src_full_path, dst=?dst_full_path, "rename file");
+        let src_parent_ino = self
+            .lookup(&src_parent_path)
+            .await
+            .expect("source parent should exist");
+        let dst_parent_ino = self
+            .lookup(&dst_parent_path)
+            .await
+            .expect("destination parent should exist");
+
+        let dest_node = self.reference.lookup(&dst_full_path).cloned();
+
+        // File-over-directory (including implicit remote prefixes / local mkdir) is outside the
+        // simple reference model; skip rather than desynchronizing on success or ambiguous errors.
+        if matches!((&src_node, &dest_node), (Node::File(_), Some(Node::Directory { .. }))) {
+            return;
+        }
+
+        let rename = self
+            .fs
+            .rename(
+                src_parent_ino,
+                src_name.as_ref(),
+                dst_parent_ino,
+                dst_name.as_ref(),
+                RenameFlags::empty(),
+            )
+            .await;
+
+        match &src_node {
+            Node::Directory { .. } => {
+                assert!(
+                    matches!(rename, Err(ref e) if e.to_errno() == libc::EPERM),
+                    "directory rename should fail with EPERM, got {rename:?}"
+                );
+            }
+            Node::File(File::Local) => {
+                assert!(
+                    matches!(rename, Err(ref e) if e.to_errno() == libc::EPERM),
+                    "rename of local (uncommitted) file should fail with EPERM, got {rename:?}"
+                );
+            }
+            Node::File(File::Remote(object)) => match &dest_node {
+                Some(Node::Directory { .. }) => unreachable!("skipped above"),
+                Some(Node::File(File::Local)) => {
+                    assert!(
+                        matches!(rename, Err(ref e) if e.to_errno() == libc::EPERM),
+                        "rename over local destination should fail with EPERM, got {rename:?}"
+                    );
+                }
+                Some(Node::File(File::Remote(_))) | None => {
+                    // Remote-over-remote or into a free name: allowed when allow_overwrite is set.
+                    rename.expect("should be able to rename remote file with copy-rename enabled");
+                    if matches!(dest_node, Some(Node::File(File::Remote(_)))) {
+                        self.reference.remove_remote_file(&dst_full_path);
+                    }
+                    self.reference.remove_remote_file(&src_full_path);
+                    // Content is what the reference compares; ETag may change after CopyObject.
+                    self.reference.add_remote_file(&dst_full_path, object.as_ref().clone());
+                }
+            },
         }
     }
 
@@ -944,6 +1055,10 @@ mod mutations {
         let config = S3FilesystemConfig {
             readdir_size: 5,
             allow_delete: true,
+            // Unofficial copy-rename: exercise rename on Standard personality (no RenameObject).
+            allow_copy_rename: true,
+            allow_overwrite: true,
+            s3_personality: S3Personality::Standard,
             cache_config: CacheConfig {
                 // We are only interested in strong consistency for the reference tests. FUSE isn't even in the loop.
                 serve_lookup_from_cache: false,
@@ -993,6 +1108,76 @@ mod mutations {
             vec![
                 Op::WriteFile("a".into(), DirectoryIndex(0), FileContent(0x0a, FileSize::Small(50))),
                 Op::WriteFile("b".into(), DirectoryIndex(1), FileContent(0x0b, FileSize::Small(10))),
+            ],
+            0,
+        );
+    }
+
+    /// Remote file rename via copy-rename to a free destination name.
+    #[test]
+    fn regression_copy_rename_remote_file() {
+        run_test(
+            TreeNode::Directory(BTreeMap::from([(
+                "a".into(),
+                TreeNode::File(FileContent(0x11, FileSize::Small(32))),
+            )])),
+            vec![Op::RenameFile(
+                DirectoryIndex(0),
+                ChildIndex(0),
+                DirectoryIndex(0),
+                "b".into(),
+            )],
+            0,
+        );
+    }
+
+    /// Overwriting rename of one remote file onto another.
+    #[test]
+    fn regression_copy_rename_overwrite() {
+        run_test(
+            TreeNode::Directory(BTreeMap::from([
+                ("a".into(), TreeNode::File(FileContent(0x11, FileSize::Small(16)))),
+                ("b".into(), TreeNode::File(FileContent(0x22, FileSize::Small(8)))),
+            ])),
+            vec![Op::RenameFile(
+                DirectoryIndex(0),
+                ChildIndex(0), // "a" in BTreeMap order
+                DirectoryIndex(0),
+                "b".into(),
+            )],
+            0,
+        );
+    }
+
+    /// Directory rename must fail; tree unchanged.
+    #[test]
+    fn regression_copy_rename_rejects_directory() {
+        run_test(
+            TreeNode::Directory(BTreeMap::from([(
+                "d".into(),
+                TreeNode::Directory(BTreeMap::from([(
+                    "f".into(),
+                    TreeNode::File(FileContent(0, FileSize::Small(1))),
+                )])),
+            )])),
+            vec![Op::RenameFile(
+                DirectoryIndex(0),
+                ChildIndex(0), // "d"
+                DirectoryIndex(0),
+                "e".into(),
+            )],
+            0,
+        );
+    }
+
+    /// Local (not yet committed) files cannot be renamed.
+    #[test]
+    fn regression_copy_rename_rejects_local_file() {
+        run_test(
+            TreeNode::Directory(BTreeMap::from([])),
+            vec![
+                Op::CreateFile("a".into(), DirectoryIndex(0), FileContent(0, FileSize::Small(4))),
+                Op::RenameFile(DirectoryIndex(0), ChildIndex(0), DirectoryIndex(0), "b".into()),
             ],
             0,
         );

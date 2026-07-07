@@ -12,14 +12,14 @@ use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 
 /// A file node, which could be local or remote.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum File {
     Local,
     Remote(Box<MockObject>),
 }
 
 /// A node in the reference model. This node could be local or remote.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Node {
     Directory {
         children: BTreeMap<String, Node>,

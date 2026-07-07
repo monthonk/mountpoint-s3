@@ -1,5 +1,6 @@
 ## Unreleased (v0.20.1)
 
+* Extend `CopyObjectParams` with optional `If-None-Match` support and add `CopyObjectError::PreConditionFailed` / `AccessDenied` plus `DeleteObjectError::AccessDenied` for callers implementing conditional copy and authorization handling.
 * Update to latest CRT dependencies.
 
 ## v0.20.0 (April 28, 2026)

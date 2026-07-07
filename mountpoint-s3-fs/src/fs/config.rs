@@ -49,6 +49,8 @@ pub struct S3FilesystemConfig {
     pub allow_overwrite: bool,
     /// Allow renames
     pub allow_rename: bool,
+    /// Allow emulated rename on general purpose buckets via CopyObject + DeleteObject
+    pub allow_copy_rename: bool,
     /// Enable incremental uploads
     pub incremental_upload: bool,
     /// Storage class to be used for new object uploads
@@ -88,6 +90,7 @@ impl Default for S3FilesystemConfig {
             allow_overwrite: false,
             incremental_upload: false,
             allow_rename: true,
+            allow_copy_rename: false,
             storage_class: None,
             s3_personality: S3Personality::default(),
             server_side_encryption: Default::default(),

@@ -68,6 +68,10 @@ pub struct MockClientConfig {
     initial_read_window_size: usize,
     enable_rename: bool,
     fail_on_non_aligned_read_window: bool,
+    /// When true, [`ObjectClient::delete_object`] returns [`DeleteObjectError::AccessDenied`].
+    deny_delete: bool,
+    /// When true, [`ObjectClient::copy_object`] returns [`CopyObjectError::AccessDenied`].
+    deny_copy: bool,
 }
 
 impl MockClientConfig {
@@ -115,6 +119,18 @@ impl MockClientConfig {
         self
     }
 
+    /// Deny all delete operations with AccessDenied.
+    pub fn deny_delete(mut self, deny: bool) -> Self {
+        self.deny_delete = deny;
+        self
+    }
+
+    /// Deny all copy operations with AccessDenied.
+    pub fn deny_copy(mut self, deny: bool) -> Self {
+        self.deny_copy = deny;
+        self
+    }
+
     /// Build the MockClient
     pub fn build(self) -> MockClient {
         MockClient::new(self)
@@ -130,6 +146,8 @@ pub struct MockClient {
     in_progress_uploads: Arc<RwLock<BTreeSet<String>>>,
     operation_counts: Arc<RwLock<HashMap<Operation, u64>>>,
     read_window_increment_failed: Arc<AtomicBool>,
+    deny_delete: Arc<AtomicBool>,
+    deny_copy: Arc<AtomicBool>,
 }
 
 fn add_object(objects: &Arc<RwLock<BTreeMap<String, MockObject>>>, key: &str, value: MockObject) {
@@ -140,12 +158,16 @@ impl MockClient {
     /// Create a new [MockClient] with the given config
     pub fn new(config: MockClientConfig) -> Self {
         let read_window_increment_failed = Arc::new(AtomicBool::new(false));
+        let deny_delete = Arc::new(AtomicBool::new(config.deny_delete));
+        let deny_copy = Arc::new(AtomicBool::new(config.deny_copy));
         Self {
             config,
             objects: Default::default(),
             in_progress_uploads: Default::default(),
             operation_counts: Default::default(),
             read_window_increment_failed,
+            deny_delete,
+            deny_copy,
         }
     }
 
@@ -183,6 +205,16 @@ impl MockClient {
     pub fn contains_prefix(&self, prefix: &str) -> bool {
         let prefix = format!("{prefix}/");
         self.objects.read().unwrap().keys().any(|k| k.starts_with(&prefix))
+    }
+
+    /// Toggle AccessDenied responses for delete operations.
+    pub fn set_deny_delete(&self, deny: bool) {
+        self.deny_delete.store(deny, Ordering::SeqCst);
+    }
+
+    /// Toggle AccessDenied responses for copy operations.
+    pub fn set_deny_copy(&self, deny: bool) {
+        self.deny_copy.store(deny, Ordering::SeqCst);
     }
 
     /// Returns `true` if there is an upload in progress for the specified key
@@ -905,6 +937,10 @@ impl ObjectClient for MockClient {
             return Err(ObjectClientError::ServiceError(DeleteObjectError::NoSuchBucket));
         }
 
+        if self.deny_delete.load(Ordering::SeqCst) {
+            return Err(ObjectClientError::ServiceError(DeleteObjectError::AccessDenied));
+        }
+
         self.remove_object(key);
 
         Ok(DeleteObjectResult {})
@@ -916,13 +952,25 @@ impl ObjectClient for MockClient {
         source_key: &str,
         destination_bucket: &str,
         destination_key: &str,
-        _params: &CopyObjectParams,
+        params: &CopyObjectParams,
     ) -> ObjectClientResult<CopyObjectResult, CopyObjectError, Self::ClientError> {
+        self.inc_op_count(Operation::CopyObject);
+
         if destination_bucket != self.config.bucket && source_bucket != self.config.bucket {
             return Err(ObjectClientError::ServiceError(CopyObjectError::NotFound));
         }
 
+        if self.deny_copy.load(Ordering::SeqCst) {
+            return Err(ObjectClientError::ServiceError(CopyObjectError::AccessDenied));
+        }
+
         let mut objects = self.objects.write().unwrap();
+        if params.if_none_match.as_deref() == Some("*") && objects.contains_key(destination_key) {
+            return Err(ObjectClientError::ServiceError(CopyObjectError::PreConditionFailed(
+                RenamePreconditionTypes::IfNoneMatch,
+            )));
+        }
+
         if let Some(object) = objects.get(source_key) {
             let cloned_object = object.clone();
             objects.insert(destination_key.to_owned(), cloned_object);

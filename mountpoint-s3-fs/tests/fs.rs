@@ -1702,3 +1702,50 @@ async fn test_rename_support_is_cached() {
     assert_eq!(err.to_errno(), libc::ENOSYS, "rename should again fail with ENOSYS");
     assert_eq!(counter.count(), 1, "The second failed rename should have been cached");
 }
+
+#[tokio::test]
+async fn test_copy_rename_emulation() {
+    const BUCKET_NAME: &str = "test_copy_rename_emulation";
+    const FILE_NAME: &str = "source.txt";
+
+    let part_size = 1024 * 1024;
+    let pool = PagedPool::new_with_candidate_sizes([part_size]);
+    let client = Arc::new(
+        MockClient::config()
+            .bucket(BUCKET_NAME)
+            .part_size(part_size)
+            .enable_backpressure(true)
+            .initial_read_window_size(256 * 1024)
+            .enable_rename(false)
+            .build(),
+    );
+    client
+        .put_object_single(BUCKET_NAME, FILE_NAME, &PutObjectSingleParams::new(), "hello")
+        .await
+        .unwrap();
+
+    let fs = make_test_filesystem_with_client(
+        client.clone(),
+        pool,
+        BUCKET_NAME,
+        &Default::default(),
+        S3FilesystemConfig {
+            allow_delete: true,
+            allow_copy_rename: true,
+            allow_rename: false,
+            ..Default::default()
+        },
+    );
+
+    fs.rename(
+        FUSE_ROOT_INODE,
+        FILE_NAME.as_ref(),
+        FUSE_ROOT_INODE,
+        "dest.txt".as_ref(),
+        RenameFlags::empty(),
+    )
+    .await
+    .expect("copy-rename should succeed on general purpose mock bucket");
+    assert!(!client.contains_key(FILE_NAME));
+    assert!(client.contains_key("dest.txt"));
+}

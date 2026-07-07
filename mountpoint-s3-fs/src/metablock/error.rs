@@ -59,6 +59,25 @@ pub enum InodeError {
     },
     #[error("rename is not supported on this bucket")]
     RenameNotSupported(),
+    #[error("copy-rename is disabled for the remainder of this mount after an unrecoverable error")]
+    CopyRenameDisabled(),
+    #[error(
+        "copy-rename is not enabled; pass '--allow-copy-rename' with '--allow-delete' to enable emulation on general purpose buckets"
+    )]
+    CopyRenameNotEnabled(),
+    #[error(
+        "object {src_key:?} is too large for copy-rename (size {size} bytes, limit {limit} bytes); use S3 Express One Zone for atomic rename of large objects"
+    )]
+    CopyRenameObjectTooLarge { src_key: String, size: u64, limit: u64 },
+    #[error(
+        "rename partially applied: created destination {dest_key:?} but failed to delete source {src_key:?}; remove one key manually to repair"
+    )]
+    CopyRenamePartialFailure {
+        src_key: String,
+        dest_key: String,
+        source: Arc<anyhow::Error>,
+        metadata: Box<ErrorMetadata>,
+    },
     #[error("S3 key {0:?} was too long")]
     NameTooLong(String),
     #[error("corrupted metadata for inode {0}")]
@@ -130,7 +149,35 @@ impl InodeError {
     pub fn meta(&self) -> ErrorMetadata {
         match self {
             Self::ClientError { source: _, metadata } => (**metadata).clone(),
+            Self::CopyRenamePartialFailure { metadata, .. } => (**metadata).clone(),
             _ => Default::default(),
+        }
+    }
+
+    /// Construct [InodeError::CopyRenamePartialFailure] with client error metadata.
+    pub fn copy_rename_partial_failure<E>(
+        err: E,
+        context: &'static str,
+        bucket: &str,
+        src_key: impl Into<String>,
+        dest_key: impl Into<String>,
+    ) -> Self
+    where
+        E: ProvideErrorMetadata + std::error::Error + Send + Sync + 'static,
+    {
+        let src_key = src_key.into();
+        let dest_key = dest_key.into();
+        let metadata = ErrorMetadata {
+            client_error_meta: err.meta(),
+            error_code: Some(MOUNTPOINT_ERROR_CLIENT.to_string()),
+            s3_bucket_name: Some(bucket.to_string()),
+            s3_object_key: Some(src_key.clone()),
+        };
+        InodeError::CopyRenamePartialFailure {
+            src_key,
+            dest_key,
+            source: Arc::new(anyhow!(err).context(context)),
+            metadata: Box::new(metadata),
         }
     }
 }

@@ -823,6 +823,7 @@ mod tests {
             SuperblockConfig {
                 cache_config: fs_config.cache_config.clone(),
                 s3_personality: fs_config.s3_personality,
+                allow_copy_rename: fs_config.allow_copy_rename,
             },
         );
         let mut fs = S3Filesystem::new(client, prefetcher_builder, pool, runtime, superblock, fs_config);
@@ -1086,6 +1087,7 @@ mod tests {
             SuperblockConfig {
                 cache_config: fs_config.cache_config.clone(),
                 s3_personality: fs_config.s3_personality,
+                allow_copy_rename: fs_config.allow_copy_rename,
             },
         );
         S3Filesystem::new(client, prefetcher_builder, pool, runtime, superblock, fs_config)

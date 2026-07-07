@@ -138,6 +138,16 @@ Learn more in Mountpoint's configuration documentation (CONFIGURATION.md).\
 
     #[clap(
         long,
+        help = "Allow emulated file rename on general purpose buckets via CopyObject and DeleteObject \
+                for objects up to 5 GiB. Requires --allow-delete. Not atomic; see SEMANTICS.md.",
+        help_heading = MOUNT_OPTIONS_HEADER,
+        requires = "allow_delete",
+        conflicts_with = "read_only"
+    )]
+    pub allow_copy_rename: bool,
+
+    #[clap(
+        long,
         help = "Allow overwrite operations on file system",
         help_heading = MOUNT_OPTIONS_HEADER
     )]
@@ -555,6 +565,7 @@ impl CliArgs {
         }
         filesystem_config.storage_class = self.storage_class.clone();
         filesystem_config.allow_delete = self.allow_delete;
+        filesystem_config.allow_copy_rename = self.allow_copy_rename;
         filesystem_config.allow_overwrite = self.allow_overwrite;
         filesystem_config.incremental_upload = self.incremental_upload;
         filesystem_config.s3_personality = s3_personality;

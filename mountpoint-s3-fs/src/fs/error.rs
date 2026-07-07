@@ -182,6 +182,10 @@ impl ToErrno for InodeError {
             InodeError::RenameDestinationExists { .. } => libc::EEXIST,
             InodeError::RenameNotPermittedWhileWriting(_) => libc::EPERM,
             InodeError::RenameNotSupported() => libc::ENOSYS,
+            InodeError::CopyRenameDisabled() => libc::ENOSYS,
+            InodeError::CopyRenameNotEnabled() => libc::ENOSYS,
+            InodeError::CopyRenameObjectTooLarge { .. } => libc::EFBIG,
+            InodeError::CopyRenamePartialFailure { .. } => libc::EIO,
             InodeError::NameTooLong(_) => libc::ENAMETOOLONG,
             #[cfg(feature = "manifest")]
             InodeError::ManifestError { .. } => libc::EIO,

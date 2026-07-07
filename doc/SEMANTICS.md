@@ -25,6 +25,14 @@ Rename operations immediately rename the object in S3.
 Existing readers (to source or destination) may eventually fail to read more data from the object after it has been renamed.
 You cannot rename a file while it or the destination of a rename is being written by the same Mountpoint instance.
 
+On general purpose buckets, optional **copy-rename** emulation is available with `--allow-copy-rename` together with `--allow-delete`.
+When enabled, Mountpoint renames committed remote files up to 5 GiB by issuing `CopyObject` followed by `DeleteObject` on the source key.
+This emulation is **not atomic**: the destination is a new object (new ETag/version), and a failure deleting the source after a successful copy leaves **both** keys in the bucket and returns an error.
+In that case Mountpoint does not update local name bindings to claim success.
+If copy-rename hits an unrecoverable authorization error (including delete denied after a successful copy), Mountpoint disables copy-rename for the remainder of the mount and logs that fact; later renames fail immediately without creating additional objects.
+Remount with corrected IAM permissions to re-enable.
+Directory rename, objects larger than 5 GiB, and files that are still being written are not supported by copy-rename.
+
 Append and rename are not supported for directory buckets that reside in Local Zones. You can only append data to or rename existing objects in directory buckets that reside in Availability Zones.
 You should not pass the `--incremental-upload` flag to Mountpoint in this case, as writes to files will fail. Attempting to rename files in this case will lead to the operation being rejected.
 
@@ -313,7 +321,8 @@ On Amazon S3 directory buckets in S3 Express One Zone, renaming individual files
 * Note, that renaming the last file in a directory has a similar effect to that directory as removing the last file. Thus, moving the last file out of a directory
   may lead to that directory being inaccessible, as there will no longer be an object in S3 under that directory.
 
-Renaming individual files is not supported by Amazon S3 general purpose buckets, nor objects not in the S3 Express One Zone storage class.
+Renaming individual files is not supported by Amazon S3 general purpose buckets, nor objects not in the S3 Express One Zone storage class, unless copy-rename emulation is enabled with `--allow-copy-rename` and `--allow-delete` (see above).
+Copy-rename applies only to committed remote files of at most 5 GiB and uses `CopyObject` plus `DeleteObject` rather than atomic `RenameObject`.
 
 Directory rename is not supported on any Amazon S3 bucket type.
 

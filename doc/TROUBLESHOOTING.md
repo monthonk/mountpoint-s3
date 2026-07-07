@@ -133,7 +133,7 @@ mountpoint_s3_fs::fuse: rename failed with errno 1: inode error: inode 2 (key "d
 
 ### Rename rejected where unsupported
 
-Attempting to rename a file where unsupported, such as on general purpose buckets, will return an error (ENOSYS):
+Attempting to rename a file where unsupported, such as on general purpose buckets without `--allow-copy-rename`, will return an error (ENOSYS):
 
 ```
 $ mv hello.txt new_hello.txt
@@ -146,6 +146,12 @@ Mountpoint logs should show the following message:
 WARN rename{req=764 parent=1 name="hello.txt" newparent=1 newname="new_hello.txt"}:
 mountpoint_s3_fs::fuse: rename failed with errno 38: inode error: rename is not supported on this bucket
 ```
+
+On general purpose buckets, pass `--allow-copy-rename` together with `--allow-delete` to enable emulated rename for committed files up to 5 GiB.
+
+### Copy-rename partially applied
+
+With `--allow-copy-rename`, if `CopyObject` succeeds but deleting the source fails (for example missing `s3:DeleteObject`), Mountpoint returns an error (EIO), leaves both object keys in the bucket, and disables copy-rename for the rest of the mount. Remove either key manually to repair, fix IAM permissions, and remount to re-enable emulation.
 
 ### Rename rejected due to existing destination
 

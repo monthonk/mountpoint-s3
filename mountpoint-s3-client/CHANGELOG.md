@@ -1,6 +1,7 @@
 ## Unreleased (v0.21.0)
 
 * **Breaking:** `ObjectClient::put_object_single` now requires `contents: impl AsRef<[u8]> + Send + 'static` (was `+ 'a`), so the body can be held until the request is fully torn down.
+* Extend `CopyObjectParams` with optional `If-None-Match` support and add `CopyObjectError::PreConditionFailed` / `AccessDenied` plus `DeleteObjectError::AccessDenied` for callers implementing conditional copy and authorization handling.
 * Update to latest CRT dependencies.
 * Add `TlsConfig` type and `S3ClientConfig::tls_config()` builder for configuring a custom CA trust store. ([#1834](https://github.com/awslabs/mountpoint-s3/pull/1834))
 * Run cleanup for CRT libraries on process exit. ([#1850](https://github.com/awslabs/mountpoint-s3/pull/1850))

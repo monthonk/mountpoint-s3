@@ -200,7 +200,32 @@ impl ProvideErrorMetadata for HeadObjectError {
 
 impl ProvideErrorMetadata for DeleteObjectError {
     fn meta(&self) -> ClientErrorMetadata {
-        Default::default()
+        match self {
+            DeleteObjectError::AccessDenied => ClientErrorMetadata {
+                http_code: Some(403),
+                error_code: Some("AccessDenied".to_string()),
+                error_message: Some("Access Denied".to_string()),
+            },
+            DeleteObjectError::NoSuchBucket => Default::default(),
+        }
+    }
+}
+
+impl ProvideErrorMetadata for CopyObjectError {
+    fn meta(&self) -> ClientErrorMetadata {
+        match self {
+            CopyObjectError::AccessDenied => ClientErrorMetadata {
+                http_code: Some(403),
+                error_code: Some("AccessDenied".to_string()),
+                error_message: Some("Access Denied".to_string()),
+            },
+            CopyObjectError::PreConditionFailed(_) => ClientErrorMetadata {
+                http_code: Some(412),
+                error_code: Some("PreconditionFailed".to_string()),
+                ..Default::default()
+            },
+            _ => Default::default(),
+        }
     }
 }
 
@@ -391,6 +416,8 @@ pub struct DeleteObjectResult {}
 pub enum DeleteObjectError {
     #[error("The bucket does not exist")]
     NoSuchBucket,
+    #[error("Access denied")]
+    AccessDenied,
 }
 
 /// Result of a [`copy_object`](ObjectClient::copy_object) request
@@ -410,19 +437,32 @@ pub enum CopyObjectError {
 
     #[error("The source object of the COPY action is not in the active tier and is only stored in Amazon S3 Glacier.")]
     ObjectNotInActiveTierError,
+
+    #[error("A precondition for the copy was not met")]
+    PreConditionFailed(RenamePreconditionTypes),
+
+    #[error("Access denied")]
+    AccessDenied,
 }
 
 /// Parameters to a [`copy_object`](ObjectClient::copy_object) request
 #[derive(Debug, Default, Clone)]
 #[non_exhaustive]
 pub struct CopyObjectParams {
-    // TODO: Populate this struct with fields as and when required to satisfy various use cases.
+    /// Set to `*` to fail the copy when the destination key already exists.
+    pub if_none_match: Option<String>,
 }
 
 impl CopyObjectParams {
     /// Create a default [CopyObjectParams].
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Set the If-None-Match header (typically `*`).
+    pub fn if_none_match(mut self, value: Option<String>) -> Self {
+        self.if_none_match = value;
+        self
     }
 }
 

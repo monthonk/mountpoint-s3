@@ -2,9 +2,11 @@ use std::ops::Deref;
 use std::os::unix::prelude::OsStrExt;
 
 use mountpoint_s3_crt::{http::request_response::Header, s3::client::MetaRequestResult};
-use tracing::trace;
+use tracing::{debug, trace};
 
-use crate::object_client::{CopyObjectError, CopyObjectParams, CopyObjectResult, ObjectClientResult};
+use crate::object_client::{
+    CopyObjectError, CopyObjectParams, CopyObjectResult, ObjectClientResult, RenamePreconditionTypes,
+};
 
 use super::{S3CrtClient, S3Operation, S3RequestError};
 
@@ -16,7 +18,7 @@ impl S3CrtClient {
         source_key: &str,
         destination_bucket: &str,
         destination_key: &str,
-        _params: &CopyObjectParams,
+        params: &CopyObjectParams,
     ) -> ObjectClientResult<CopyObjectResult, CopyObjectError, S3RequestError> {
         let request = {
             let mut message = self
@@ -32,6 +34,15 @@ impl S3CrtClient {
                     format!("/{source_bucket}/{source_key}"),
                 ))
                 .map_err(S3RequestError::construction_failure)?;
+
+            if let Some(guard) = &params.if_none_match {
+                if guard != "*" {
+                    debug!(?guard, "Unexpected if-none-match guard on CopyObject");
+                }
+                message
+                    .set_header(&Header::new("If-None-Match", guard))
+                    .map_err(S3RequestError::construction_failure)?;
+            }
 
             let span = request_span!(
                 self.inner,
@@ -62,6 +73,7 @@ impl S3CrtClient {
         Ok(CopyObjectResult {})
     }
 }
+
 fn parse_copy_object_error(result: &MetaRequestResult) -> Option<CopyObjectError> {
     match result.response_status {
         403 => {
@@ -72,10 +84,16 @@ fn parse_copy_object_error(result: &MetaRequestResult) -> Option<CopyObjectError
 
             match error_str.deref() {
                 "ObjectNotInActiveTierError" => Some(CopyObjectError::ObjectNotInActiveTierError),
-                _ => None,
+                "AccessDenied" | "InvalidToken" | "ExpiredToken" | "SignatureDoesNotMatch" => {
+                    Some(CopyObjectError::AccessDenied)
+                }
+                _ => Some(CopyObjectError::AccessDenied),
             }
         }
         404 => Some(CopyObjectError::NotFound),
+        412 => Some(CopyObjectError::PreConditionFailed(
+            RenamePreconditionTypes::IfNoneMatch,
+        )),
         _ => None,
     }
 }
@@ -101,10 +119,29 @@ mod tests {
         assert_eq!(result, Some(CopyObjectError::ObjectNotInActiveTierError));
     }
     #[test]
+    fn parse_403_access_denied() {
+        let body = br#"<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message><BucketName>test-bucket</BucketName><RequestId>BHCQ0FTYY0HKMV43</RequestId><HostId>ntCK1jQfPxY7sSNL/GB13RttgJLjSETfIuOiuRnwImO0dQP2ttj2Qqpn5S/jSLt3Ql0TgHWuYF0=</HostId></Error>"#;
+        let result = make_result(403, OsStr::from_bytes(&body[..]));
+        let result = parse_copy_object_error(&result);
+        assert_eq!(result, Some(CopyObjectError::AccessDenied));
+    }
+    #[test]
     fn parse_404_error() {
         let body = br#"<?xml version="1.0" encoding="UTF-8"?><Error><Code></Code><Message></Message><BucketName>test-bucket</BucketName><RequestId>BHCQ0FTYY0HKMV43</RequestId><HostId>ntCK1jQfPxY7sSNL/GB13RttgJLjSETfIuOiuRnwImO0dQP2ttj2Qqpn5S/jSLt3Ql0TgHWuYF0=</HostId></Error>"#;
         let result = make_result(404, OsStr::from_bytes(&body[..]));
         let result = parse_copy_object_error(&result);
         assert_eq!(result, Some(CopyObjectError::NotFound));
+    }
+    #[test]
+    fn parse_412_precondition_failed() {
+        let body = br#"<?xml version="1.0" encoding="UTF-8"?><Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message></Error>"#;
+        let result = make_result(412, OsStr::from_bytes(&body[..]));
+        let result = parse_copy_object_error(&result);
+        assert_eq!(
+            result,
+            Some(CopyObjectError::PreConditionFailed(
+                RenamePreconditionTypes::IfNoneMatch
+            ))
+        );
     }
 }

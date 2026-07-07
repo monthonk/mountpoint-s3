@@ -228,6 +228,7 @@ where
             SuperblockConfig {
                 cache_config: filesystem_config.cache_config.clone(),
                 s3_personality: filesystem_config.s3_personality,
+                allow_copy_rename: filesystem_config.allow_copy_rename,
             },
         ),
         filesystem_config,

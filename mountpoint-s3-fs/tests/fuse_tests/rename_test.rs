@@ -2365,8 +2365,7 @@ where
     let mount_point = test_session.mount_path();
 
     test_client.put_object("dir-a/file.txt", b"x").unwrap();
-    let err = fs::rename(mount_point.join("dir-a"), mount_point.join("dir-b"))
-        .expect_err("directory rename must fail");
+    let err = fs::rename(mount_point.join("dir-a"), mount_point.join("dir-b")).expect_err("directory rename must fail");
     assert_eq!(err.raw_os_error(), Some(libc::EPERM));
 }
 

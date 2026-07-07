@@ -165,13 +165,19 @@ impl Inode {
     }
 
     /// Try to clone the inode with a new key.
-    /// Additionally, it prolongs the validity be the time amount specified.
+    /// Additionally, it prolongs the validity by the time amount specified.
+    ///
+    /// `etag` is the entity tag to store on the new inode. Callers must pass the correct value for
+    /// the destination object: for atomic `RenameObject` the source etag is typically fine; for
+    /// copy-rename the destination has a new object identity and should be refreshed (e.g. via
+    /// HeadObject) rather than reusing the source etag.
     pub fn try_clone_with_new_key(
         &self,
         new_key: ValidKey,
         prefix: &Prefix,
         new_validity: Duration,
         new_parent: InodeNo,
+        etag: Option<Box<str>>,
     ) -> Result<Inode, InodeError> {
         if self.kind() != InodeKind::File {
             debug!("Cannot re-create an inode of kind != InodeKind::File");
@@ -182,7 +188,7 @@ impl Inode {
             stat: InodeStat::for_file(
                 old_inode_state.stat.size,
                 old_inode_state.stat.atime,
-                old_inode_state.stat.etag.clone(),
+                etag,
                 None,
                 None,
                 new_validity,

@@ -2178,3 +2178,206 @@ fn rename_concurrent_remove_mock(prefix: &str) {
 fn rename_concurrent_remove_s3(prefix: &str) {
     rename_concurrent_remove_test(fuse::s3_session::new, prefix);
 }
+
+fn copy_rename_config() -> TestSessionConfig {
+    TestSessionConfig {
+        filesystem_config: S3FilesystemConfig {
+            allow_delete: true,
+            allow_copy_rename: true,
+            allow_rename: false,
+            s3_personality: S3Personality::Standard,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+/// Basic copy-rename emulation on general purpose buckets (CopyObject + DeleteObject).
+fn copy_rename_basic_test<F>(creator_fn: F, prefix: &str)
+where
+    F: FnOnce(&str, TestSessionConfig) -> TestSession,
+{
+    let test_session = creator_fn(prefix, copy_rename_config());
+    let test_client = test_session.client();
+    let mount_point = test_session.mount_path();
+
+    test_client
+        .put_object("dir/source.txt", b"copy-rename-payload")
+        .expect("put object should succeed");
+
+    let main_dir = mount_point.join("dir");
+    let source_path = main_dir.join("source.txt");
+    let destination_path = main_dir.join("destination.txt");
+
+    let read_dir_iter = fs::read_dir(&main_dir).unwrap();
+    let dir_entry_names = read_dir_to_entry_names(read_dir_iter);
+    assert_eq!(dir_entry_names, vec!["source.txt"]);
+
+    fs::rename(&source_path, &destination_path).expect("copy-rename should succeed");
+    let err = fs::metadata(&source_path).expect_err("source should no longer exist");
+    assert_eq!(err.kind(), ErrorKind::NotFound);
+    let metadata = fs::metadata(&destination_path).expect("destination should exist");
+    assert_eq!(metadata.len(), b"copy-rename-payload".len() as u64);
+
+    let content = fs::read_to_string(&destination_path).expect("should read renamed file");
+    assert_eq!(content, "copy-rename-payload");
+
+    let read_dir_iter = fs::read_dir(&main_dir).unwrap();
+    let dir_entry_names = read_dir_to_entry_names(read_dir_iter);
+    assert_eq!(dir_entry_names, vec!["destination.txt"]);
+
+    assert!(
+        test_client.contains_key("dir/destination.txt").unwrap(),
+        "destination object must exist in S3"
+    );
+    assert!(
+        !test_client.contains_key("dir/source.txt").unwrap(),
+        "source object must be deleted from S3"
+    );
+}
+
+#[cfg(feature = "fuse_tests")]
+#[test_case("copy_rename_basic"; "prefix")]
+fn copy_rename_basic_mock(prefix: &str) {
+    copy_rename_basic_test(fuse::mock_session::new, prefix);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test_case("copy_rename_basic"; "prefix")]
+fn copy_rename_basic_s3(prefix: &str) {
+    copy_rename_basic_test(fuse::s3_session::new, prefix);
+}
+
+/// Non-replacing copy-rename must fail with EEXIST when the destination already exists.
+fn copy_rename_dest_exists_test<F>(creator_fn: F, prefix: &str)
+where
+    F: FnOnce(&str, TestSessionConfig) -> TestSession,
+{
+    let test_session = creator_fn(prefix, copy_rename_config());
+    let test_client = test_session.client();
+    let mount_point = test_session.mount_path();
+
+    test_client.put_object("source.txt", b"source").unwrap();
+    test_client.put_object("destination.txt", b"destination").unwrap();
+
+    let err = fs::rename(mount_point.join("source.txt"), mount_point.join("destination.txt"))
+        .expect_err("should fail if destination exists without allow_overwrite");
+    assert_eq!(err.kind(), ErrorKind::AlreadyExists);
+    assert!(test_client.contains_key("source.txt").unwrap());
+    assert_eq!(
+        test_client.get_object_size("destination.txt").unwrap(),
+        b"destination".len()
+    );
+}
+
+#[cfg(feature = "fuse_tests")]
+#[test_case("copy_rename_dest_exists"; "prefix")]
+fn copy_rename_dest_exists_mock(prefix: &str) {
+    copy_rename_dest_exists_test(fuse::mock_session::new, prefix);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test_case("copy_rename_dest_exists"; "prefix")]
+fn copy_rename_dest_exists_s3(prefix: &str) {
+    copy_rename_dest_exists_test(fuse::s3_session::new, prefix);
+}
+
+/// Replacing copy-rename with --allow-overwrite replaces the destination object.
+fn copy_rename_overwrite_test<F>(creator_fn: F, prefix: &str)
+where
+    F: FnOnce(&str, TestSessionConfig) -> TestSession,
+{
+    let mut config = copy_rename_config();
+    config.filesystem_config.allow_overwrite = true;
+    let test_session = creator_fn(prefix, config);
+    let test_client = test_session.client();
+    let mount_point = test_session.mount_path();
+
+    test_client.put_object("source.txt", b"source-bytes").unwrap();
+    test_client.put_object("destination.txt", b"old-destination").unwrap();
+
+    fs::rename(mount_point.join("source.txt"), mount_point.join("destination.txt"))
+        .expect("overwrite copy-rename should succeed");
+    assert!(!test_client.contains_key("source.txt").unwrap());
+    assert!(test_client.contains_key("destination.txt").unwrap());
+    let content = fs::read_to_string(mount_point.join("destination.txt")).unwrap();
+    assert_eq!(content, "source-bytes");
+}
+
+#[cfg(feature = "fuse_tests")]
+#[test_case("copy_rename_overwrite"; "prefix")]
+fn copy_rename_overwrite_mock(prefix: &str) {
+    copy_rename_overwrite_test(fuse::mock_session::new, prefix);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test_case("copy_rename_overwrite"; "prefix")]
+fn copy_rename_overwrite_s3(prefix: &str) {
+    copy_rename_overwrite_test(fuse::s3_session::new, prefix);
+}
+
+/// Without --allow-copy-rename, general purpose buckets reject rename with ENOSYS.
+fn copy_rename_disabled_returns_enosys_test<F>(creator_fn: F, prefix: &str)
+where
+    F: FnOnce(&str, TestSessionConfig) -> TestSession,
+{
+    let test_session_config = TestSessionConfig {
+        filesystem_config: S3FilesystemConfig {
+            allow_delete: true,
+            allow_copy_rename: false,
+            allow_rename: false,
+            s3_personality: S3Personality::Standard,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let test_session = creator_fn(prefix, test_session_config);
+    let test_client = test_session.client();
+    let mount_point = test_session.mount_path();
+
+    test_client.put_object("source.txt", b"data").unwrap();
+    let err = fs::rename(mount_point.join("source.txt"), mount_point.join("destination.txt"))
+        .expect_err("rename should be unsupported without copy-rename");
+    assert_eq!(err.raw_os_error(), Some(libc::ENOSYS));
+    assert!(test_client.contains_key("source.txt").unwrap());
+    assert!(!test_client.contains_key("destination.txt").unwrap());
+}
+
+#[cfg(feature = "fuse_tests")]
+#[test_case("copy_rename_disabled"; "prefix")]
+fn copy_rename_disabled_returns_enosys_mock(prefix: &str) {
+    copy_rename_disabled_returns_enosys_test(fuse::mock_session::new, prefix);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test_case("copy_rename_disabled"; "prefix")]
+fn copy_rename_disabled_returns_enosys_s3(prefix: &str) {
+    copy_rename_disabled_returns_enosys_test(fuse::s3_session::new, prefix);
+}
+
+/// Directory rename remains unsupported under copy-rename emulation.
+fn copy_rename_directory_rejected_test<F>(creator_fn: F, prefix: &str)
+where
+    F: FnOnce(&str, TestSessionConfig) -> TestSession,
+{
+    let test_session = creator_fn(prefix, copy_rename_config());
+    let test_client = test_session.client();
+    let mount_point = test_session.mount_path();
+
+    test_client.put_object("dir-a/file.txt", b"x").unwrap();
+    let err = fs::rename(mount_point.join("dir-a"), mount_point.join("dir-b"))
+        .expect_err("directory rename must fail");
+    assert_eq!(err.raw_os_error(), Some(libc::EPERM));
+}
+
+#[cfg(feature = "fuse_tests")]
+#[test_case("copy_rename_directory_rejected"; "prefix")]
+fn copy_rename_directory_rejected_mock(prefix: &str) {
+    copy_rename_directory_rejected_test(fuse::mock_session::new, prefix);
+}
+
+#[cfg(feature = "s3_tests")]
+#[test_case("copy_rename_directory_rejected"; "prefix")]
+fn copy_rename_directory_rejected_s3(prefix: &str) {
+    copy_rename_directory_rejected_test(fuse::s3_session::new, prefix);
+}

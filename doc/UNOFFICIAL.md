@@ -11,9 +11,12 @@ Unofficial features:
 * are not covered by AWS Support for Mountpoint
 * should be evaluated carefully for production use (failure modes, IAM, atomicity, and cost)
 
-Stable upstream behavior is documented in [CONFIGURATION.md](./CONFIGURATION.md),
-[SEMANTICS.md](./SEMANTICS.md), and [TROUBLESHOOTING.md](./TROUBLESHOOTING.md). Where those docs
-mention an unofficial feature, they point here for full detail.
+**Documentation policy:** Upstream-facing docs (`README.md`, [CONFIGURATION.md](./CONFIGURATION.md),
+[SEMANTICS.md](./SEMANTICS.md), [TROUBLESHOOTING.md](./TROUBLESHOOTING.md), changelogs for released
+behavior, and similar) stay aligned with [awslabs/mountpoint-s3](https://github.com/awslabs/mountpoint-s3)
+`main` so merges from origin stay small. **This file is the only place** that documents unofficial
+features end-to-end. Official docs describe upstream defaults only (for example, general purpose
+buckets do not support rename unless noted here).
 
 ## Index
 
@@ -119,11 +122,13 @@ remount if the gate was disabled.
   change even when bytes are identical.
 * Content-Type is not updated on rename (same as other Mountpoint renames).
 
-### Related documentation
+### Related upstream documentation (unchanged defaults)
 
-* Configuration overview: [CONFIGURATION.md](./CONFIGURATION.md#file-modifications-and-deletions)
-* Semantics: [SEMANTICS.md](./SEMANTICS.md#file-and-directory-rename)
-* Troubleshooting: [TROUBLESHOOTING.md](./TROUBLESHOOTING.md#rename-rejected-where-unsupported)
+These describe **upstream** behavior without copy-rename. Use this page for the unofficial override.
+
+* File modifications and deletions: [CONFIGURATION.md](./CONFIGURATION.md#file-modifications-and-deletions)
+* File and directory rename (Express-only upstream): [SEMANTICS.md](./SEMANTICS.md#file-and-directory-rename)
+* Rename rejected where unsupported: [TROUBLESHOOTING.md](./TROUBLESHOOTING.md#rename-rejected-where-unsupported)
 
 ### Metrics
 

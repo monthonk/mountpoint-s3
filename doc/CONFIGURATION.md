@@ -270,16 +270,10 @@ By default, Mountpoint allows creating new files but does not allow deleting or 
 
 If you want to allow file deletion, use the `--allow-delete` flag at mount time.
 Delete operations are immediately actioned against the object in S3, even if the file is being read from.
-Deleting existing files requires permission for the `s3:DeleteObject` action. Mountpoint does not verify this permission at startup; missing permissions surface when a delete is attempted.
 
-File rename is supported atomically for objects stored in the S3 Express One Zone storage class via the `RenameObject` API.
+File rename is supported for objects stored in the S3 Express One Zone storage class.
 Renames that would replace the destination file are only enabled when the `--allow-overwrite` flag is set.
-Rename operations on Express are performed atomically and immediately actioned against the objects in S3, even where the source or any destination file is being read from.
-
-> [!NOTE]
-> **Unofficial feature:** On general purpose buckets, this fork can opt in to **copy-rename** emulation with `--allow-copy-rename` (requires `--allow-delete`).
-> Emulation uses `CopyObject` then `DeleteObject` for committed files of at most 5 GiB and is **not** atomic.
-> See **[UNOFFICIAL.md](./UNOFFICIAL.md#copy-rename-emulation)** for limits, IAM, and failure behavior.
+Rename operations are performed atomically and immediately actioned against the objects in S3, even where the source or any destination file is being read from.
 
 If you want to allow overwriting existing files, use the `--allow-overwrite` flag at mount time. The file must be opened with the `O_TRUNC` flag which will truncate the existing file. All writes must start from the beginning of the file and must be made sequentially.
 

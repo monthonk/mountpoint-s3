@@ -5,7 +5,7 @@ Mountpoint for Amazon S3 allows your applications to access objects stored in Am
 ## Behavior tenets
 
 While the rest of this document gives details on specific file system behaviors, we can summarize the Mountpoint approach in three high-level tenets:
-1. Mountpoint does not support file behaviors that cannot be implemented efficiently against S3's object APIs. By default it does not emulate operations like `rename` on S3 general purpose buckets, which would require multiple API calls to S3 to perform. (This fork offers an **unofficial**, opt-in [copy-rename](./UNOFFICIAL.md#copy-rename-emulation) path for that case.)
+1. Mountpoint does not support file behaviors that cannot be implemented efficiently against S3's object APIs. It does not emulate operations like `rename` on S3 general purpose buckets, which would require many API calls to S3 to perform.
 2. Mountpoint presents a common view of S3 object data through both file and object APIs. It does not emulate POSIX file features that have no close analog in S3's object APIs, such as mutable ownership and permissions.
 3. When these tenets conflict with POSIX requirements, Mountpoint fails early and explicitly. We would rather cause applications to fail with IO errors than silently accept operations that Mountpoint will never successfully persist, such as extended attributes.
 
@@ -24,15 +24,6 @@ While non-replacing renames do not require further flags to be set, replacing re
 Rename operations immediately rename the object in S3.
 Existing readers (to source or destination) may eventually fail to read more data from the object after it has been renamed.
 You cannot rename a file while it or the destination of a rename is being written by the same Mountpoint instance.
-
-On general purpose buckets, an **unofficial** opt-in **copy-rename** emulation is available with `--allow-copy-rename` together with `--allow-delete`.
-When enabled, Mountpoint renames committed remote files up to 5 GiB by issuing `CopyObject` followed by `DeleteObject` on the source key.
-This emulation is **not atomic**: the destination is a new object (new ETag/version), and a failure deleting the source after a successful copy leaves **both** keys in the bucket and returns an error.
-In that case Mountpoint does not update local name bindings to claim success.
-If copy-rename hits an unrecoverable authorization error (including delete denied after a successful copy), Mountpoint disables copy-rename for the remainder of the mount and logs that fact; later renames fail immediately without creating additional objects.
-Remount with corrected IAM permissions to re-enable.
-Directory rename, objects larger than 5 GiB, and files that are still being written are not supported by copy-rename.
-Full details, IAM requirements, and operational guidance are in **[UNOFFICIAL.md](./UNOFFICIAL.md#copy-rename-emulation)**.
 
 Append and rename are not supported for directory buckets that reside in Local Zones. You can only append data to or rename existing objects in directory buckets that reside in Availability Zones.
 You should not pass the `--incremental-upload` flag to Mountpoint in this case, as writes to files will fail. Attempting to rename files in this case will lead to the operation being rejected.
@@ -322,8 +313,7 @@ On Amazon S3 directory buckets in S3 Express One Zone, renaming individual files
 * Note, that renaming the last file in a directory has a similar effect to that directory as removing the last file. Thus, moving the last file out of a directory
   may lead to that directory being inaccessible, as there will no longer be an object in S3 under that directory.
 
-Renaming individual files is not supported by Amazon S3 general purpose buckets, nor objects not in the S3 Express One Zone storage class, unless the **unofficial** [copy-rename](./UNOFFICIAL.md#copy-rename-emulation) emulation is enabled with `--allow-copy-rename` and `--allow-delete` (see above).
-Copy-rename applies only to committed remote files of at most 5 GiB and uses `CopyObject` plus `DeleteObject` rather than atomic `RenameObject`.
+Renaming individual files is not supported by Amazon S3 general purpose buckets, nor objects not in the S3 Express One Zone storage class.
 
 Directory rename is not supported on any Amazon S3 bucket type.
 

@@ -21,6 +21,10 @@ To troubleshoot file operations that may not be supported by Mountpoint, see the
 
 Mountpoint for Amazon S3 is generally available! We're tracking future feature development on the [Mountpoint for Amazon S3 public roadmap](https://github.com/orgs/awslabs/projects/84). We're always interested in feedback on features, performance, and compatibility. Please send feedback by [opening a new GitHub issue](https://github.com/awslabs/mountpoint-s3/issues/new/choose) or adding your input to an existing roadmap issue.
 
+### Unofficial features (this fork)
+
+This repository’s **`unofficial`** branch may include opt-in features that are **not** part of upstream Mountpoint support (for example emulated file rename on general purpose buckets). See **[doc/UNOFFICIAL.md](doc/UNOFFICIAL.md)** for the full list, limits, and operational guidance. Keep **`main`** aligned with upstream; land experimental work on **`unofficial`**.
+
 ### Notices
 
 > [!IMPORTANT]

@@ -276,10 +276,10 @@ File rename is supported atomically for objects stored in the S3 Express One Zon
 Renames that would replace the destination file are only enabled when the `--allow-overwrite` flag is set.
 Rename operations on Express are performed atomically and immediately actioned against the objects in S3, even where the source or any destination file is being read from.
 
-On general purpose buckets, you can opt in to emulated file rename with `--allow-copy-rename` (requires `--allow-delete`).
-Emulation copies the object with `CopyObject` and then deletes the source key, and is limited to committed files of at most 5 GiB.
-It requires `s3:GetObject` and `s3:PutObject` (for the copy) in addition to `s3:DeleteObject`.
-The operation is not atomic; see [SEMANTICS.md](./SEMANTICS.md#file-and-directory-rename) for failure behavior.
+> [!NOTE]
+> **Unofficial feature:** On general purpose buckets, this fork can opt in to **copy-rename** emulation with `--allow-copy-rename` (requires `--allow-delete`).
+> Emulation uses `CopyObject` then `DeleteObject` for committed files of at most 5 GiB and is **not** atomic.
+> See **[UNOFFICIAL.md](./UNOFFICIAL.md#copy-rename-emulation)** for limits, IAM, and failure behavior.
 
 If you want to allow overwriting existing files, use the `--allow-overwrite` flag at mount time. The file must be opened with the `O_TRUNC` flag which will truncate the existing file. All writes must start from the beginning of the file and must be made sequentially.
 

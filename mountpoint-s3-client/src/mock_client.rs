@@ -972,7 +972,9 @@ impl ObjectClient for MockClient {
         }
 
         if let Some(object) = objects.get(source_key) {
-            let cloned_object = object.clone();
+            // Real S3 assigns a new object identity / ETag on CopyObject.
+            let mut cloned_object = object.clone();
+            cloned_object.etag = ETag::from_object_bytes(format!("copy:{destination_key}").as_bytes());
             objects.insert(destination_key.to_owned(), cloned_object);
             Ok(CopyObjectResult {})
         } else {

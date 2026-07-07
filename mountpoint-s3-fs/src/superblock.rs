@@ -526,13 +526,48 @@ impl<OC: ObjectClient + Send + Sync> Superblock<OC> {
         }
     }
 
+    /// Size-check, run copy-rename, and invalidate the destination negative cache on failure.
+    async fn execute_copy_rename(
+        &self,
+        src_inode: &Inode,
+        src_key: &str,
+        dest_key: &str,
+        allow_overwrite: bool,
+        dst_parent: &Inode,
+        dst_name: &OsStr,
+    ) -> Result<Option<Box<str>>, InodeError> {
+        let size = src_inode.get_inode_state()?.stat.size as u64;
+        if size > COPY_RENAME_MAX_OBJECT_SIZE {
+            return Err(InodeError::CopyRenameObjectTooLarge {
+                src_key: src_key.to_string(),
+                size,
+                limit: COPY_RENAME_MAX_OBJECT_SIZE,
+            });
+        }
+        match self.copy_rename(src_inode, src_key, dest_key, allow_overwrite).await {
+            Ok(etag) => Ok(etag),
+            Err(err) => {
+                // Destination may now exist in S3 even though local state was not updated.
+                if let Some(name) = dst_name.to_str() {
+                    self.inner.negative_cache.remove(dst_parent.ino(), name);
+                }
+                Err(err)
+            }
+        }
+    }
+
+    /// Emulate rename with CopyObject + DeleteObject.
+    ///
+    /// On success, returns the destination object's ETag from a follow-up HeadObject when possible.
+    /// If HeadObject fails after a successful remote rename, returns `None` so local metadata does
+    /// not retain a stale source ETag (callers should force revalidation).
     async fn copy_rename(
         &self,
         src_inode: &Inode,
         src_key: &str,
         dest_key: &str,
         allow_overwrite: bool,
-    ) -> Result<(), InodeError> {
+    ) -> Result<Option<Box<str>>, InodeError> {
         if !self.inner.copy_rename_gate.is_enabled() {
             if self.inner.copy_rename_gate.was_enabled_at_mount() {
                 return Err(InodeError::CopyRenameDisabled());
@@ -591,7 +626,6 @@ impl<OC: ObjectClient + Send + Sync> Superblock<OC> {
             Ok(_) => {
                 debug!(?src_key, ?dest_key, "DeleteObject succeeded after copy-rename");
                 metrics::counter!("fuse.rename.copy_rename").increment(1);
-                Ok(())
             }
             Err(error) => {
                 let auth_failure = matches!(error, ObjectClientError::ServiceError(DeleteObjectError::AccessDenied))
@@ -612,13 +646,32 @@ impl<OC: ObjectClient + Send + Sync> Superblock<OC> {
                         .disable("DeleteObject returned an authorization error after a successful CopyObject");
                 }
 
-                Err(InodeError::copy_rename_partial_failure(
+                return Err(InodeError::copy_rename_partial_failure(
                     error,
                     "DeleteObject failed after successful CopyObject during copy-rename",
                     bucket,
                     src_key,
                     dest_key,
-                ))
+                ));
+            }
+        }
+
+        // CopyObject creates a new object identity; do not keep the source ETag on the renamed inode.
+        match self
+            .inner
+            .client
+            .head_object(bucket, dest_key, &HeadObjectParams::new())
+            .await
+        {
+            Ok(head) => Ok(Some(head.etag.as_str().into())),
+            Err(error) => {
+                warn!(
+                    ?src_key,
+                    ?dest_key,
+                    ?error,
+                    "HeadObject after successful copy-rename failed; clearing destination ETag so metadata will revalidate"
+                );
+                Ok(None)
             }
         }
     }
@@ -634,6 +687,7 @@ impl<OC: ObjectClient + Send + Sync> Superblock<OC> {
         dest_full_valid_name: ValidKey,
         dst_parent_ino: InodeNo,
         dst_name: &OsStr,
+        dest_etag: Option<Box<str>>,
         src_status_guard: &mut PendingRenameGuard<'_>,
         dest_status_guard: Option<PendingRenameGuard<'_>>,
     ) -> Result<(), InodeError> {
@@ -672,6 +726,7 @@ impl<OC: ObjectClient + Send + Sync> Superblock<OC> {
                         &self.inner.s3_path.prefix,
                         self.inner.config.cache_config.file_ttl,
                         dst_parent_ino,
+                        dest_etag,
                     )?;
 
                     let concurrent_modification_detected =
@@ -730,9 +785,10 @@ impl<OC: ObjectClient + Send + Sync + Clone> Metablock for Superblock<OC> {
 
     /// Rename a remote file.
     ///
-    /// Prefers the atomic `RenameObject` API when the bucket supports it (S3 Express directory
-    /// buckets). On general purpose buckets, when `allow_copy_rename` is enabled, falls back to
-    /// `CopyObject` + `DeleteObject` for objects up to [COPY_RENAME_MAX_OBJECT_SIZE].
+    /// Prefers the atomic `RenameObject` API when the bucket personality supports it (S3 Express
+    /// directory buckets) and runtime probing has not cached a failure. On general purpose buckets,
+    /// when `allow_copy_rename` is enabled, uses `CopyObject` + `DeleteObject` for objects up to
+    /// [COPY_RENAME_MAX_OBJECT_SIZE] without first probing `RenameObject`.
     async fn rename(
         &self,
         src_parent_ino: InodeNo,
@@ -741,14 +797,17 @@ impl<OC: ObjectClient + Send + Sync + Clone> Metablock for Superblock<OC> {
         dst_name: &OsStr,
         allow_overwrite: bool,
     ) -> Result<(), InodeError> {
-        let try_native = self.inner.cached_rename_support.should_try_rename();
+        // Skip the native probe when personality cannot support RenameObject (e.g. general purpose
+        // buckets). Runtime RenameCache still gates Express and mis-inferred personalities.
+        let try_native = self.inner.config.s3_personality.supports_rename_object()
+            && self.inner.cached_rename_support.should_try_rename();
         let copy_rename_enabled = self.inner.copy_rename_gate.is_enabled();
         if !try_native && !copy_rename_enabled {
             if self.inner.copy_rename_gate.was_enabled_at_mount() {
                 trace!("copy-rename previously disabled for this mount");
                 return Err(InodeError::CopyRenameDisabled());
             }
-            trace!("Cached rename failure and copy-rename not enabled");
+            trace!("Native rename unavailable and copy-rename not enabled");
             return Err(InodeError::RenameNotSupported());
         }
 
@@ -800,12 +859,15 @@ impl<OC: ObjectClient + Send + Sync + Clone> Metablock for Superblock<OC> {
         let dest_key: String = format!("{}{}", self.inner.s3_path.prefix, dest_full_valid_name.as_ref());
         debug!(?src_key, ?dest_key, "rename on remote file will now be actioned");
 
-        let use_copy_rename = if try_native {
+        let dest_etag = if try_native {
             match self
                 .try_native_rename(&src_inode, &src_key, &dest_key, allow_overwrite)
                 .await
             {
-                Ok(()) => false,
+                Ok(()) => {
+                    // Atomic rename keeps object identity; source etag remains valid.
+                    src_inode.get_inode_state()?.stat.etag.clone()
+                }
                 Err(NativeRenameOutcome::NotSupported) => {
                     if !copy_rename_enabled {
                         if self.inner.copy_rename_gate.was_enabled_at_mount() {
@@ -813,31 +875,15 @@ impl<OC: ObjectClient + Send + Sync + Clone> Metablock for Superblock<OC> {
                         }
                         return Err(InodeError::RenameNotSupported());
                     }
-                    true
+                    self.execute_copy_rename(&src_inode, &src_key, &dest_key, allow_overwrite, &dst_parent, dst_name)
+                        .await?
                 }
                 Err(NativeRenameOutcome::Failed(err)) => return Err(err),
             }
         } else {
-            true
+            self.execute_copy_rename(&src_inode, &src_key, &dest_key, allow_overwrite, &dst_parent, dst_name)
+                .await?
         };
-
-        if use_copy_rename {
-            let size = src_inode.get_inode_state()?.stat.size as u64;
-            if size > COPY_RENAME_MAX_OBJECT_SIZE {
-                return Err(InodeError::CopyRenameObjectTooLarge {
-                    src_key: src_key.to_string(),
-                    size,
-                    limit: COPY_RENAME_MAX_OBJECT_SIZE,
-                });
-            }
-            if let Err(err) = self.copy_rename(&src_inode, &src_key, &dest_key, allow_overwrite).await {
-                // Destination may now exist in S3 even though local state was not updated.
-                if let Some(name) = dst_name.to_str() {
-                    self.inner.negative_cache.remove(dst_parent.ino(), name);
-                }
-                return Err(err);
-            }
-        }
 
         self.finish_rename_local_state(
             &src_parent,
@@ -848,6 +894,7 @@ impl<OC: ObjectClient + Send + Sync + Clone> Metablock for Superblock<OC> {
             dest_full_valid_name,
             dst_parent_ino,
             dst_name,
+            dest_etag,
             &mut src_status_guard,
             dest_status_guard,
         )?;
@@ -3552,15 +3599,30 @@ mod tests {
                 .enable_rename(false)
                 .build(),
         );
-        client.add_object("a.txt", MockObject::constant(0x11, 64, ETag::for_tests()));
+        let source_etag = ETag::for_tests();
+        client.add_object("a.txt", MockObject::constant(0x11, 64, source_etag.clone()));
         let superblock = Superblock::new(
             client.clone(),
             S3Path::new(bucket, Prefix::new("").unwrap()),
             SuperblockConfig {
                 allow_copy_rename: true,
+                s3_personality: S3Personality::Standard,
                 ..Default::default()
             },
         );
+
+        let source_lookup = superblock
+            .lookup(FUSE_ROOT_INODE, "a.txt".as_ref())
+            .await
+            .expect("source should exist before rename");
+        assert_eq!(
+            source_lookup.stat().etag.as_deref(),
+            Some(source_etag.as_str()),
+            "precondition: source inode caches source ETag"
+        );
+
+        let rename_counter = client.new_counter(Operation::RenameObject);
+        let head_counter = client.new_counter(Operation::HeadObject);
 
         superblock
             .rename(
@@ -3573,12 +3635,34 @@ mod tests {
             .await
             .expect("copy-rename should succeed");
 
+        assert_eq!(
+            rename_counter.count(),
+            0,
+            "Standard personality must not probe RenameObject when using copy-rename"
+        );
+        assert!(
+            head_counter.count() >= 1,
+            "copy-rename should HeadObject the destination to refresh ETag"
+        );
+
         assert!(!client.contains_key("a.txt"));
         assert!(client.contains_key("b.txt"));
-        superblock
+        let dest_object_etag = ETag::from_object_bytes(b"copy:b.txt");
+        assert_ne!(
+            dest_object_etag.as_str(),
+            source_etag.as_str(),
+            "mock CopyObject should assign a new ETag"
+        );
+
+        let dest_lookup = superblock
             .lookup(FUSE_ROOT_INODE, "b.txt".as_ref())
             .await
             .expect("destination should be visible");
+        assert_eq!(
+            dest_lookup.stat().etag.as_deref(),
+            Some(dest_object_etag.as_str()),
+            "destination inode must use the post-copy ETag, not the source ETag"
+        );
         superblock
             .lookup(FUSE_ROOT_INODE, "a.txt".as_ref())
             .await

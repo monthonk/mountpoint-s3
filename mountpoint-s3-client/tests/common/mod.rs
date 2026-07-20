@@ -12,7 +12,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_smithy_runtime_api::client::orchestrator::HttpResponse;
 use bytes::Bytes;
 use futures::{Stream, StreamExt, pin_mut};
-use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
+use mountpoint_s3_client::config::{AddressingStyle, EndpointConfig, S3ClientConfig};
 use mountpoint_s3_client::types::{ClientBackpressureHandle, GetBodyPart, GetObjectResponse};
 use mountpoint_s3_client::{NewClientError, OnTelemetry, S3CrtClient};
 use mountpoint_s3_crt::common::allocator::Allocator;
@@ -164,11 +164,25 @@ fn get_test_endpoint_url() -> Option<String> {
     }
 }
 
+/// Whether tests should force path-style S3 addressing (e.g. MinIO).
+pub fn force_path_style() -> bool {
+    match std::env::var("S3_FORCE_PATH_STYLE") {
+        Ok(value) => {
+            let value = value.trim();
+            value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+        }
+        Err(_) => false,
+    }
+}
+
 pub fn get_test_endpoint_config() -> EndpointConfig {
     let mut endpoint_config = EndpointConfig::new(&get_test_region());
     if let Some(endpoint_url) = get_test_endpoint_url() {
         let endpoint = Uri::new_from_str(&Allocator::default(), endpoint_url.clone()).expect("invalid endpoint url");
         endpoint_config = endpoint_config.endpoint(endpoint);
+    }
+    if force_path_style() {
+        endpoint_config = endpoint_config.addressing_style(AddressingStyle::Path);
     }
     endpoint_config
 }
@@ -186,7 +200,13 @@ pub async fn get_test_sdk_client() -> s3::Client {
     if let Some(endpoint_url) = get_test_endpoint_url() {
         sdk_config = sdk_config.endpoint_url(endpoint_url);
     }
-    s3::Client::new(&sdk_config.load().await)
+    let conf = sdk_config.load().await;
+    if force_path_style() {
+        let s3_conf = s3::config::Builder::from(&conf).force_path_style(true).build();
+        s3::Client::from_conf(s3_conf)
+    } else {
+        s3::Client::new(&conf)
+    }
 }
 
 /// Create some objects in a prefix for testing.

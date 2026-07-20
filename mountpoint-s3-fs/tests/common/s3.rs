@@ -1,11 +1,25 @@
 use aws_config::{BehaviorVersion, Region};
 use aws_sdk_s3::primitives::ByteStream;
-use mountpoint_s3_client::config::{Allocator, EndpointConfig, Uri};
+use mountpoint_s3_client::config::{AddressingStyle, Allocator, EndpointConfig, Uri};
 use mountpoint_s3_fs::s3::{Bucket, Prefix, S3Path};
 use rand::TryRng;
 use rand::rngs::SysRng;
 
 use crate::common::tokio_block_on;
+
+/// Whether tests should force path-style S3 addressing.
+///
+/// Set `S3_FORCE_PATH_STYLE=1` (or `true`) when pointing tests at MinIO or other
+/// S3-compatible servers that do not support virtual-hosted-style DNS.
+pub fn force_path_style() -> bool {
+    match std::env::var("S3_FORCE_PATH_STYLE") {
+        Ok(value) => {
+            let value = value.trim();
+            value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+        }
+        Err(_) => false,
+    }
+}
 
 pub fn get_test_s3_path(test_name: &str) -> S3Path {
     let (bucket, prefix) = get_test_bucket_and_prefix(test_name);
@@ -90,6 +104,9 @@ pub fn get_test_endpoint_config() -> EndpointConfig {
         let endpoint = Uri::new_from_str(&Allocator::default(), endpoint_url.clone()).expect("invalid endpoint url");
         endpoint_config = endpoint_config.endpoint(endpoint);
     }
+    if force_path_style() {
+        endpoint_config = endpoint_config.addressing_style(AddressingStyle::Path);
+    }
     endpoint_config
 }
 
@@ -106,7 +123,13 @@ pub async fn get_test_sdk_client(region: &str) -> aws_sdk_s3::Client {
     if let Some(endpoint_url) = get_test_endpoint_url() {
         sdk_config = sdk_config.endpoint_url(endpoint_url);
     }
-    aws_sdk_s3::Client::new(&sdk_config.load().await)
+    let conf = sdk_config.load().await;
+    if force_path_style() {
+        let s3_conf = aws_sdk_s3::config::Builder::from(&conf).force_path_style(true).build();
+        aws_sdk_s3::Client::from_conf(s3_conf)
+    } else {
+        aws_sdk_s3::Client::new(&conf)
+    }
 }
 
 pub fn get_test_kms_key_id() -> String {

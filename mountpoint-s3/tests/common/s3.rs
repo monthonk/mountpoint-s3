@@ -44,12 +44,29 @@ pub fn get_test_endpoint_url() -> Option<String> {
     }
 }
 
+/// Whether tests should force path-style S3 addressing (e.g. MinIO).
+pub fn force_path_style() -> bool {
+    match std::env::var("S3_FORCE_PATH_STYLE") {
+        Ok(value) => {
+            let value = value.trim();
+            value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+        }
+        Err(_) => false,
+    }
+}
+
 pub async fn get_test_sdk_client(region: &str) -> aws_sdk_s3::Client {
     let mut sdk_config = aws_config::defaults(BehaviorVersion::latest()).region(Region::new(region.to_owned()));
     if let Some(endpoint_url) = get_test_endpoint_url() {
         sdk_config = sdk_config.endpoint_url(endpoint_url);
     }
-    aws_sdk_s3::Client::new(&sdk_config.load().await)
+    let conf = sdk_config.load().await;
+    if force_path_style() {
+        let s3_conf = aws_sdk_s3::config::Builder::from(&conf).force_path_style(true).build();
+        aws_sdk_s3::Client::from_conf(s3_conf)
+    } else {
+        aws_sdk_s3::Client::new(&conf)
+    }
 }
 
 pub fn create_objects(bucket: &str, prefix: &str, region: &str, key: &str, value: &[u8]) {

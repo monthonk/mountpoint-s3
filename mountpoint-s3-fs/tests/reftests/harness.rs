@@ -580,10 +580,7 @@ impl Harness {
         }
 
         trace!(src=?src_full_path, dst=?dst_full_path, "rename file");
-        let src_parent_ino = self
-            .lookup(&src_parent_path)
-            .await
-            .expect("source parent should exist");
+        let src_parent_ino = self.lookup(&src_parent_path).await.expect("source parent should exist");
         let dst_parent_ino = self
             .lookup(&dst_parent_path)
             .await

@@ -139,7 +139,7 @@ Learn more in Mountpoint's configuration documentation (CONFIGURATION.md).\
     #[clap(
         long,
         help = "Allow emulated file rename on general purpose buckets via CopyObject and DeleteObject \
-                for objects up to 5 GiB. Requires --allow-delete. Not atomic; see SEMANTICS.md.",
+                for objects up to 5 GiB. Requires --allow-delete. Not atomic; see doc/UNOFFICIAL.md.",
         help_heading = MOUNT_OPTIONS_HEADER,
         requires = "allow_delete",
         conflicts_with = "read_only"

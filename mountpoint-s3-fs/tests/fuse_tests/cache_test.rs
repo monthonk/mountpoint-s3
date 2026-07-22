@@ -138,6 +138,13 @@ fn express_cache_write_read(key_suffix: &str, key_size: usize, object_size: usiz
 #[test_case("key", 100, 1024 * 1024; "big file")]
 #[cfg(feature = "s3_tests")]
 fn disk_cache_write_read(key_suffix: &str, key_size: usize, object_size: usize) {
+    use crate::common::{S3Capability, require_capability};
+
+    // MinIO rejects object path components longer than 255 bytes (`XMinioInvalidObjectName`).
+    if key_size > 255 && !require_capability(S3Capability::LongObjectKeys) {
+        return;
+    }
+
     let cache_dir = tempfile::tempdir().unwrap();
     let cache_config = DiskDataCacheConfig {
         cache_directory: cache_dir.path().to_path_buf(),

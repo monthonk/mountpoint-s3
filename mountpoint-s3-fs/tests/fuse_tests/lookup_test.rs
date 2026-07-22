@@ -12,6 +12,8 @@ use mountpoint_s3_fs::{
 use test_case::test_case;
 
 use crate::common::fuse::{self, TestSessionConfig, TestSessionCreator, read_dir_to_entry_names};
+#[cfg(feature = "s3_tests")]
+use crate::common::{S3Capability, require_capability};
 
 /// See [mountpoint_s3_fs::inode::tests::test_lookup_directory_overlap].
 fn lookup_directory_overlap_test(creator_fn: impl TestSessionCreator, prefix: &str, subdir: &str) {
@@ -95,6 +97,9 @@ fn lookup_weird_characters_test(creator_fn: impl TestSessionCreator, prefix: &st
 #[cfg(feature = "s3_tests")]
 #[test]
 fn lookup_directory_weird_characters_s3() {
+    if !require_capability(S3Capability::SpecialCharacterObjectKeys) {
+        return;
+    }
     lookup_weird_characters_test(fuse::s3_session::new, "lookup_weird_characters_test");
 }
 

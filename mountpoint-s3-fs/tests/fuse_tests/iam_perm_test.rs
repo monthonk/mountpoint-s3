@@ -20,6 +20,7 @@ use crate::common::creds::get_scoped_down_credentials;
 use crate::common::fuse::{self, TestSessionConfig, read_dir_to_entry_names};
 use crate::common::s3::{get_test_bucket, get_test_region, get_test_sdk_client};
 use crate::common::tokio_block_on;
+use crate::common::{S3Capability, require_capability};
 
 /// Demonstrate behavior of Mountpoint combined with an IAM policy that leverages attribute-based access control (ABAC)
 /// via S3 object tagging.
@@ -28,6 +29,9 @@ use crate::common::tokio_block_on;
 #[test_case(true; "with metadata cache")]
 #[test_case(false; "without metadata cache")]
 fn get_object_req_existing_tags(metadata_cache: bool) {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let bucket = get_test_bucket();
 
     let cache_config = if metadata_cache {

@@ -20,6 +20,9 @@ async fn test_head_bucket_correct_region() {
 #[tokio::test]
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_head_bucket_wrong_region() {
+    if !require_capability(S3Capability::RegionRedirects) {
+        return;
+    }
     use mountpoint_s3_client::config::{EndpointConfig, S3ClientConfig};
 
     let (bucket, _) = get_test_bucket_and_prefix("test_head_bucket_wrong_region");
@@ -39,6 +42,9 @@ async fn test_head_bucket_wrong_region() {
 
 #[tokio::test]
 async fn test_head_bucket_forbidden() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let (bucket, _prefix) = get_test_bucket_and_prefix("test_head_bucket_forbidden");
 
     let provider = get_no_permissions_provider().await;

@@ -56,6 +56,9 @@ async fn test_head_object() {
 #[test_case(ChecksumAlgorithm::Sha256)]
 #[tokio::test]
 async fn test_head_object_checksum(checksum_algorithm: ChecksumAlgorithm) {
+    if !require_capability(S3Capability::GetObjectChecksums) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_head_object");
 
@@ -123,6 +126,9 @@ async fn test_head_object_checksum(checksum_algorithm: ChecksumAlgorithm) {
 // S3 Express One Zone is a distinct storage class and can't be overridden
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_head_object_storage_class(storage_class: &str) {
+    if !require_capability(S3Capability::StorageClasses) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_head_object");
 
@@ -153,7 +159,7 @@ async fn test_head_object_storage_class(storage_class: &str) {
 async fn test_head_object_404_key() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_head_object_404_key");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
 
@@ -168,7 +174,7 @@ async fn test_head_object_404_key() {
 async fn test_head_object_404_bucket() {
     let (_bucket, prefix) = get_test_bucket_and_prefix("test_head_object_404_bucket");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
 
@@ -183,6 +189,9 @@ async fn test_head_object_404_bucket() {
 
 #[tokio::test]
 async fn test_head_object_no_perm() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_head_object_no_perm");
 
     let provider = get_no_permissions_provider().await;
@@ -191,7 +200,7 @@ async fn test_head_object_no_perm() {
         .endpoint_config(get_test_endpoint_config());
     let client: S3CrtClient = get_test_client_with_config(config);
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let err = client
         .head_object(&bucket, &key, &HeadObjectParams::new())
@@ -204,10 +213,13 @@ async fn test_head_object_no_perm() {
 #[tokio::test]
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_head_object_restored() {
+    if !require_capability(S3Capability::ObjectRestore) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_head_object_restored");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -273,6 +285,9 @@ async fn test_head_object_sse(
     sse_type: Option<&str>,
     kms_key_id: Option<String>,
 ) {
+    if !require_capability(S3Capability::ServerSideEncryption) {
+        return;
+    }
     let key = format!("{prefix}hello");
     let expected_sdk_sse = sse_type.map(|sse| sse.parse().expect("unexpected sse type was used in a test"));
     let sdk_client = get_test_sdk_client().await;
@@ -312,6 +327,9 @@ async fn test_head_object_sse(
 #[tokio::test]
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_head_object_sse_s3(sse_type: Option<&str>, kms_key_id: Option<String>) {
+    if !require_capability(S3Capability::ServerSideEncryption) {
+        return;
+    }
     let prefix = get_unique_test_prefix("test_head_object_sse_s3");
     let bucket = get_test_bucket();
     let client: S3CrtClient = get_test_client();
@@ -322,6 +340,9 @@ async fn test_head_object_sse_s3(sse_type: Option<&str>, kms_key_id: Option<Stri
 #[tokio::test]
 #[cfg(feature = "s3express_tests")]
 async fn test_head_object_sse_s3express() {
+    if !require_capability(S3Capability::ServerSideEncryption) {
+        return;
+    }
     // Directory buckets only allow to set sse on the whole bucket. See
     // [Server-side encryption](https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-express-data-protection.html#s3-express-ecnryption) for directory buckets.
     // We will only test the default here.

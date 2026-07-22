@@ -1562,6 +1562,10 @@ async fn test_lookup_404_not_an_error() {
 #[cfg(all(feature = "s3_tests", not(feature = "s3express_tests")))]
 #[tokio::test]
 async fn test_lookup_forbidden() {
+    use crate::common::{S3Capability, require_capability};
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let name = "test_lookup_forbidden";
     let (bucket, prefix) = get_test_bucket_and_prefix(name);
     let key = format!("{}{}", prefix, name);

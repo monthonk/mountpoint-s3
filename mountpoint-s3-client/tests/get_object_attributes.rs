@@ -102,11 +102,14 @@ async fn create_mpu_object(
 }
 
 async fn test_with_checksum(checksum_algorithm: ChecksumAlgorithm) {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_checksum");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
 
     let put_object_output = sdk_client
@@ -171,11 +174,14 @@ async fn test_with_checksum(checksum_algorithm: ChecksumAlgorithm) {
 
 #[tokio::test]
 async fn test_get_attributes() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     let put_object_output = sdk_client
         .put_object()
@@ -223,16 +229,22 @@ async fn test_get_attributes() {
 #[test_case(ChecksumAlgorithm::Sha256)]
 #[tokio::test]
 async fn test_get_attributes_with_checksum(checksum_algorithm: ChecksumAlgorithm) {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     test_with_checksum(checksum_algorithm).await;
 }
 
 #[tokio::test]
 async fn test_get_attributes_all_none() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_all_none");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -262,10 +274,13 @@ async fn test_get_attributes_all_none() {
 
 #[tokio::test]
 async fn test_get_attributes_mpu() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_mpu");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let parts_size: Vec<usize> = vec![5 * 1024 * 1024, 1024];
     let object_size = parts_size.iter().sum::<usize>() as u64;
 
@@ -318,10 +333,13 @@ async fn test_get_attributes_mpu() {
 
 #[tokio::test]
 async fn test_get_attributes_mpu_with_checksum() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_mpu_with_checksum");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let parts_size: Vec<usize> = vec![5 * 1024 * 1024, 1024];
     let object_size = parts_size.iter().sum::<usize>() as u64;
 
@@ -390,10 +408,13 @@ async fn test_get_attributes_mpu_with_checksum() {
 
 #[tokio::test]
 async fn test_get_attributes_mpu_pagination() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_mpu_pagination");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let parts_size: Vec<usize> = vec![5 * 1024 * 1024, 1024];
 
     let (completed_parts, _complete_mpu_output) =
@@ -461,9 +482,12 @@ async fn test_get_attributes_mpu_pagination() {
 
 #[tokio::test]
 async fn test_get_attributes_404_key() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_404");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
     let object_attributes = vec![ObjectAttribute::ETag];
@@ -479,9 +503,12 @@ async fn test_get_attributes_404_key() {
 
 #[tokio::test]
 async fn test_get_attributes_404_bucket() {
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
     let (_bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_404");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
     let object_attributes = vec![ObjectAttribute::ETag];
@@ -497,6 +524,9 @@ async fn test_get_attributes_404_bucket() {
 
 #[tokio::test]
 async fn test_get_attributes_no_perm() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_attributes_no_perm");
 
     let provider = get_no_permissions_provider().await;
@@ -505,7 +535,7 @@ async fn test_get_attributes_no_perm() {
         .endpoint_config(get_test_endpoint_config());
     let client: S3CrtClient = get_test_client_with_config(config);
 
-    let key = format!("{prefix}/some_key");
+    let key = object_key(&prefix, "some_key");
     let object_attributes = vec![ObjectAttribute::ETag];
 
     let err = client

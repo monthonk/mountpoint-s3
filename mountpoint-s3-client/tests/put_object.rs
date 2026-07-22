@@ -223,6 +223,10 @@ object_client_test!(test_put_object_dropped);
 // #[test_case(30_000_000; "large")]  // The Abort and in-flight parts can race and cause some parts to be left behind, recreating the MPU
 #[tokio::test]
 async fn test_put_object_abort(size: usize) {
+    if !require_capability(S3Capability::ListMultipartUploads) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_put_object_abort");
     let client = get_test_client();
     let key = format!("{prefix}hello");
@@ -538,6 +542,10 @@ async fn check_get_object<Client: ObjectClient>(
 // S3 Express One Zone is a distinct storage class and can't be overridden
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_put_object_storage_class(storage_class: &str) {
+    if !require_capability(S3Capability::StorageClasses) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_put_object_storage_class");
     let client = get_test_client();
     let key = format!("{prefix}hello");
@@ -637,6 +645,10 @@ async fn check_sse(
 #[tokio::test]
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_put_object_sse(sse_type: Option<&str>, kms_key_id: Option<String>) {
+    if !require_capability(S3Capability::ServerSideEncryption) {
+        return;
+    }
+
     let bucket = get_test_bucket();
     let client = get_test_client();
     let request_params = PutObjectParams::new()

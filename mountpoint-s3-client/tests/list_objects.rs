@@ -129,6 +129,10 @@ async fn test_list_objects_404_bucket() {
 #[cfg(not(feature = "s3express_tests"))]
 #[tokio::test]
 async fn test_interesting_keys() {
+    if !require_capability(S3Capability::SpecialCharacterObjectKeys) {
+        return;
+    }
+
     let keys = &[
         "the first one@@@",
         "the first one@@@/the 1st one!$%#@?_.-=&+^",
@@ -179,10 +183,14 @@ async fn test_interesting_keys() {
 #[test_case(ChecksumAlgorithm::Sha256)]
 #[tokio::test]
 async fn test_checksum_attribute(upload_checksum_algorithm: ChecksumAlgorithm) {
+    if !require_capability(S3Capability::ListObjectChecksums) {
+        return;
+    }
+
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_checksum_attribute");
 
-    let key = format!("{prefix}hello.txt");
+    let key = object_key(&prefix, "hello.txt");
     let body = b"hello world!";
     sdk_client
         .put_object()

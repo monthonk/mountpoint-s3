@@ -263,6 +263,10 @@ fn read_flexible_retrieval_test(
 #[cfg(not(feature = "s3express_tests"))]
 #[test]
 fn read_flexible_retrieval_test_s3() {
+    use crate::common::{S3Capability, require_capability};
+    if !require_capability(S3Capability::StorageClasses) || !require_capability(S3Capability::ObjectRestore) {
+        return;
+    }
     const FILES: &[&str] = &["STANDARD", "GLACIER_IR", "GLACIER", "DEEP_ARCHIVE"];
     read_flexible_retrieval_test(
         fuse::s3_session::new,
@@ -307,6 +311,10 @@ fn read_flexible_retrieval_restored_test_mock(prefix: BucketPrefix) {
 #[cfg(not(feature = "s3express_tests"))]
 #[test]
 fn read_flexible_retrieval_restored_test_s3() {
+    use crate::common::{S3Capability, require_capability};
+    if !require_capability(S3Capability::StorageClasses) || !require_capability(S3Capability::ObjectRestore) {
+        return;
+    }
     const RESTORED_FILES: &[&str] = &["GLACIER"];
     read_flexible_retrieval_test(
         fuse::s3_session::new,
@@ -320,6 +328,10 @@ fn read_flexible_retrieval_restored_test_s3() {
 #[cfg(not(feature = "s3express_tests"))]
 #[test]
 fn read_flexible_retrieval_restoring_test_s3() {
+    use crate::common::{S3Capability, require_capability};
+    if !require_capability(S3Capability::StorageClasses) || !require_capability(S3Capability::ObjectRestore) {
+        return;
+    }
     const RESTORING_FILES: &[&str] = &["GLACIER", "DEEP_ARCHIVE"];
     read_flexible_retrieval_test(
         fuse::s3_session::new,

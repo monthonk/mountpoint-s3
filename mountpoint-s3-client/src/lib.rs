@@ -56,6 +56,9 @@ pub mod metrics;
 pub mod mock_client;
 mod object_client;
 mod s3_crt_client;
+/// Integration-test helpers for declaring optional S3 target capabilities (e.g. MinIO).
+#[doc(hidden)]
+pub mod test_capabilities;
 #[doc(hidden)]
 pub mod user_agent;
 

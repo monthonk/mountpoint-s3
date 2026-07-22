@@ -15,7 +15,7 @@ async fn test_delete_object() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_delete_object");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -48,7 +48,7 @@ async fn test_delete_object_no_obj() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_delete_object_no_obj");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let head_obj_err = sdk_client
         .head_object()
@@ -71,7 +71,7 @@ async fn test_delete_object_no_obj() {
 async fn test_delete_object_404_bucket() {
     let (_bucket, prefix) = get_test_bucket_and_prefix("test_delete_object_404_bucket");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
 
@@ -84,6 +84,10 @@ async fn test_delete_object_404_bucket() {
 
 #[tokio::test]
 async fn test_delete_object_no_perm() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_delete_object_no_perm");
 
     let provider = get_no_permissions_provider().await;
@@ -92,7 +96,7 @@ async fn test_delete_object_no_perm() {
         .endpoint_config(get_test_endpoint_config());
     let client: S3CrtClient = get_test_client_with_config(config);
 
-    let key = format!("{prefix}/some_key");
+    let key = object_key(&prefix, "some_key");
 
     let result = client.delete_object(&bucket, &key).await;
     let err = result.expect_err("should fail if no permission to access S3");

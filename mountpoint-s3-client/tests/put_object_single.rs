@@ -148,6 +148,10 @@ async fn test_put_checksums(checksum_algorithm: Option<ChecksumAlgorithm>) {
 
 #[tokio::test]
 async fn test_put_bad_checksums() {
+    if !require_capability(S3Capability::RejectBadUploadChecksum) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_put_bad_checksums");
     let client = get_test_client();
     let key = format!("{prefix}hello");
@@ -215,6 +219,10 @@ async fn test_put_user_object_metadata_bad_header(object_metadata: HashMap<Strin
 // S3 Express One Zone is a distinct storage class and can't be overridden
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_put_object_storage_class(storage_class: &str) {
+    if !require_capability(S3Capability::StorageClasses) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_put_object_abort");
     let client = get_test_client();
     let key = format!("{prefix}hello");
@@ -311,6 +319,10 @@ async fn check_sse(
 #[tokio::test]
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_put_object_sse(sse_type: Option<&str>, kms_key_id: Option<String>) {
+    if !require_capability(S3Capability::ServerSideEncryption) {
+        return;
+    }
+
     let bucket = get_test_bucket();
     let client = get_test_client();
     let request_params = PutObjectSingleParams::new()
@@ -350,6 +362,10 @@ async fn test_put_object_header() {
 #[tokio::test]
 #[cfg(not(feature = "s3express_tests"))]
 async fn test_append_fails_if_not_supported() {
+    if !require_capability(S3Capability::RejectAppendOnStandardBucket) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_append_fails_if_not_supported");
     let client = get_test_client();
     let key = format!("{prefix}hello");

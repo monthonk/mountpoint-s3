@@ -31,7 +31,6 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin &&
       mc mb -p local/mountpoint-test || true &&
-      mc mb -p local/mountpoint-test-2 || true &&
       mc ls local/
       "
     restart: "no"

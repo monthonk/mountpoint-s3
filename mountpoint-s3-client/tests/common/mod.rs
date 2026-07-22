@@ -28,6 +28,9 @@ pub mod creds;
 pub mod memory_pool;
 pub mod tracing_test;
 
+// Shared with other crates' integration tests via the library (hidden) module.
+pub use mountpoint_s3_client::test_capabilities::{S3Capability, has_capability, object_key, require_capability};
+
 /// Enable tracing and CRT logging when running unit tests.
 #[ctor::ctor(unsafe)]
 fn init_tracing_subscriber() {
@@ -57,8 +60,13 @@ pub fn get_unique_test_prefix(test_name: &str) -> String {
     assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
     // Generate a random nonce to make sure this prefix is truly unique
     let nonce = SysRng.try_next_u64().unwrap();
-    let prefix = format!("{prefix}{test_name}/{nonce}/");
-    prefix
+    // Avoid empty path segments (`//`) which MinIO rejects as invalid object names.
+    let test_name = test_name.trim_matches('/');
+    if test_name.is_empty() {
+        format!("{prefix}{nonce}/")
+    } else {
+        format!("{prefix}{test_name}/{nonce}/")
+    }
 }
 
 pub fn get_test_bucket() -> String {

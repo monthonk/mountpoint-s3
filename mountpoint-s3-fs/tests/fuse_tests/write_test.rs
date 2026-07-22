@@ -20,6 +20,8 @@ use mountpoint_s3_fs::content_type::ContentTypeDetection;
 use mountpoint_s3_fs::fs::{CacheConfig, UploadChecksumAlgorithm};
 
 use crate::common::fuse::{self, TestSessionConfig, TestSessionCreator, read_dir_to_entry_names};
+#[cfg(feature = "s3_tests")]
+use crate::common::{S3Capability, has_capability, require_capability};
 #[cfg(all(feature = "s3_tests", not(feature = "s3express_tests")))]
 use crate::common::{creds::get_scoped_down_credentials, s3::get_test_kms_key_id};
 
@@ -335,12 +337,24 @@ fn sequential_write_streaming_test(creator_fn: impl TestSessionCreator, object_s
     assert_eq!(err.raw_os_error(), Some(libc::EBADF));
 
     if object_size > 0 {
-        // The upload starts after the first write at the latest
-        let status = test_session
-            .client()
-            .is_upload_in_progress(KEY)
-            .expect("the upload should be in-progress");
-        assert!(status);
+        // The upload starts after the first write at the latest.
+        // ListMultipartUploads is not fully reliable on S3-compatible servers (e.g. MinIO).
+        #[cfg(feature = "s3_tests")]
+        if has_capability(S3Capability::ListMultipartUploads) {
+            let status = test_session
+                .client()
+                .is_upload_in_progress(KEY)
+                .expect("the upload should be in-progress");
+            assert!(status);
+        }
+        #[cfg(not(feature = "s3_tests"))]
+        {
+            let status = test_session
+                .client()
+                .is_upload_in_progress(KEY)
+                .expect("the upload should be in-progress");
+            assert!(status);
+        }
     }
 
     f.sync_all().unwrap();
@@ -394,11 +408,19 @@ fn fsync_test(creator_fn: impl TestSessionCreator, rw_mode: ReadWriteMode, uploa
 
     f.write_all(&body).unwrap();
 
-    assert!(upload_mode.is_incremental() || test_session.client().is_upload_in_progress(KEY).unwrap());
+    #[cfg(feature = "s3_tests")]
+    let check_mpu = has_capability(S3Capability::ListMultipartUploads);
+    #[cfg(not(feature = "s3_tests"))]
+    let check_mpu = true;
+    if check_mpu {
+        assert!(upload_mode.is_incremental() || test_session.client().is_upload_in_progress(KEY).unwrap());
+    }
 
     f.sync_all().unwrap();
 
-    assert!(upload_mode.is_incremental() || !test_session.client().is_upload_in_progress(KEY).unwrap());
+    if check_mpu {
+        assert!(upload_mode.is_incremental() || !test_session.client().is_upload_in_progress(KEY).unwrap());
+    }
 
     let m = metadata(&path).unwrap();
     assert_eq!(m.len(), body.len() as u64);
@@ -652,6 +674,9 @@ fn write_with_storage_class_test(creator_fn: impl TestSessionCreator, storage_cl
 #[test_case(Some("INTELLIGENT_TIERING"))]
 #[test_case(Some("GLACIER"))]
 fn write_with_storage_class_test_s3(storage_class: Option<&str>) {
+    if !require_capability(S3Capability::StorageClasses) {
+        return;
+    }
     write_with_storage_class_test(fuse::s3_session::new, storage_class);
 }
 
@@ -721,12 +746,21 @@ fn flush_test(creator_fn: impl TestSessionCreator, append_mode: AppendMode, uplo
         f.write_all(part).unwrap();
     }
 
-    assert!(upload_mode.is_incremental() || test_session.client().is_upload_in_progress(KEY).unwrap());
+    // ListMultipartUploads is not fully reliable on S3-compatible servers (e.g. MinIO).
+    #[cfg(feature = "s3_tests")]
+    let check_mpu = has_capability(S3Capability::ListMultipartUploads);
+    #[cfg(not(feature = "s3_tests"))]
+    let check_mpu = true;
+    if check_mpu {
+        assert!(upload_mode.is_incremental() || test_session.client().is_upload_in_progress(KEY).unwrap());
+    }
 
     // Close the file. Will trigger a call to flush.
     drop(f);
 
-    assert!(upload_mode.is_incremental() || !test_session.client().is_upload_in_progress(KEY).unwrap());
+    if check_mpu {
+        assert!(upload_mode.is_incremental() || !test_session.client().is_upload_in_progress(KEY).unwrap());
+    }
 
     // Now it's closed, we can stat or read it
     let m = metadata(&path).unwrap();
@@ -1345,6 +1379,11 @@ const SSE_S3_POLICY: &str = r#"{"Statement": [
 fn write_with_sse_settings_test(policy: &str, sse: ServerSideEncryption, should_fail: bool) {
     use crate::common::tokio_block_on;
 
+    if !require_capability(S3Capability::ServerSideEncryption) || !require_capability(S3Capability::IamSessionPolicies)
+    {
+        return;
+    }
+
     let policy = policy
         .to_string()
         .replace("__SSE_KEY_ARN__", get_test_kms_key_id().as_str());
@@ -1537,6 +1576,13 @@ fn write_checksums_test(
 #[cfg(feature = "s3_tests")]
 #[test_matrix([CHECKSUMS_CRC32C, CHECKSUMS_CRC64NVME, CHECKSUMS_DISABLED])]
 fn write_checksums_test_s3(algorithm: Option<UploadChecksumAlgorithm>) {
+    // GetObjectAttributes (used to verify part checksums) and CRC64NVME are Amazon S3–specific.
+    if !require_capability(S3Capability::GetObjectAttributes) {
+        return;
+    }
+    if algorithm == CHECKSUMS_CRC64NVME && !require_capability(S3Capability::GetObjectChecksums) {
+        return;
+    }
     write_checksums_test(fuse::s3_session::new, algorithm, ATOMIC_UPLOAD);
 }
 

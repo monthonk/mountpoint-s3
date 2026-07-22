@@ -38,7 +38,7 @@ async fn test_get_object(size: usize, range: Option<Range<u64>>) {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -67,7 +67,7 @@ async fn test_get_object_custom_id_propagates_to_memory_pool() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_custom_id_propagates_to_memory_pool");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; 1024];
     sdk_client
         .put_object()
@@ -112,7 +112,7 @@ async fn test_get_object_backpressure(size: usize, range: Option<Range<u64>>) {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -149,7 +149,7 @@ async fn verify_backpressure_get_object() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("verify_backpressure_get_object");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let expected_body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -193,7 +193,7 @@ async fn test_mutated_during_get_object_backpressure() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let expected_body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -245,7 +245,7 @@ async fn test_mutated_during_get_object_backpressure() {
 async fn test_get_object_404_key() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_404_key");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
 
@@ -275,7 +275,7 @@ async fn test_get_object_404_key() {
 async fn test_get_object_404_bucket() {
     let (_bucket, prefix) = get_test_bucket_and_prefix("test_get_object_404_bucket");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let client: S3CrtClient = get_test_client();
 
@@ -304,7 +304,7 @@ async fn test_get_object_success_if_match() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_if_match");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
 
     let response = sdk_client
@@ -332,7 +332,7 @@ async fn test_get_object_412_if_match() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_412_if_match");
 
     // Create one object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -367,6 +367,10 @@ async fn test_get_object_412_if_match() {
 
 #[tokio::test]
 async fn test_get_object_403() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_403");
 
     let provider = get_no_permissions_provider().await;
@@ -375,7 +379,7 @@ async fn test_get_object_403() {
         .endpoint_config(get_test_endpoint_config());
     let client: S3CrtClient = get_test_client_with_config(config);
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let err = client
         .get_object(&bucket, &key, &GetObjectParams::new())
@@ -404,7 +408,7 @@ async fn test_get_object_wrong_region() {
 
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_wrong_region");
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     let endpoint_config = EndpointConfig::new(&get_secondary_test_region());
     let client = get_test_client_with_config(S3ClientConfig::new().endpoint_config(endpoint_config));
@@ -433,7 +437,7 @@ async fn test_get_object_cancel(read: bool) {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_cancel");
 
     // Create one large object named "hello"
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = vec![0x42; OBJECT_SIZE];
     sdk_client
         .put_object()
@@ -477,7 +481,7 @@ async fn test_get_object_user_metadata(size: usize, metadata: HashMap<String, St
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_user_metadata");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -509,7 +513,7 @@ async fn test_get_object_user_metadata_with_zero_backpressure(size: usize, metad
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_user_metadata_with_zero_backpressure");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -539,7 +543,7 @@ async fn test_get_object_user_metadata_after_stream(size: usize, metadata: HashM
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_user_metadata");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; size];
     sdk_client
         .put_object()
@@ -573,10 +577,14 @@ async fn test_get_object_user_metadata_after_stream(size: usize, metadata: HashM
 #[test_case(ChecksumAlgorithm::Sha256)]
 #[tokio::test]
 async fn test_get_object_checksum(checksum_algorithm: ChecksumAlgorithm) {
+    if !require_capability(S3Capability::GetObjectChecksums) {
+        return;
+    }
+
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_checksum");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; 42];
     let put_object_output = sdk_client
         .put_object()
@@ -631,7 +639,7 @@ async fn test_get_object_checksum_checksums_disabled() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_checksum");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; 42];
     sdk_client
         .put_object()
@@ -663,7 +671,7 @@ async fn stress_test_get_object() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("stress_test_get_object");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; size];
     sdk_client
         .put_object()

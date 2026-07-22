@@ -157,5 +157,11 @@ fn files_shadowed_by_directories_mock() {
 #[cfg(feature = "s3_tests")]
 #[test]
 fn files_shadowed_by_directories_s3() {
+    use crate::common::{S3Capability, require_capability};
+
+    // MinIO's hierarchical model does not let object `blue` coexist with `blue/image.jpg`.
+    if !require_capability(S3Capability::ConflictingObjectAndPrefix) {
+        return;
+    }
     files_shadowed_by_directories(fuse::s3_session::new);
 }

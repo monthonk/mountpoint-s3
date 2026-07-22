@@ -71,7 +71,7 @@ pub async fn get_test_sdk_client(region: &str) -> aws_sdk_s3::Client {
 
 pub fn create_objects(bucket: &str, prefix: &str, region: &str, key: &str, value: &[u8]) {
     let sdk_client = tokio_block_on(get_test_sdk_client(region));
-    let full_key = format!("{prefix}{key}");
+    let full_key = mountpoint_s3_client::test_capabilities::object_key(prefix, key);
     tokio_block_on(
         sdk_client
             .put_object()
@@ -98,7 +98,13 @@ pub fn get_test_prefix(test_name: &str) -> String {
     let prefix = std::env::var("S3_BUCKET_TEST_PREFIX").unwrap_or(String::from("mountpoint-test/"));
     assert!(prefix.ends_with('/'), "S3_BUCKET_TEST_PREFIX should end in '/'");
 
-    format!("{prefix}{test_name}/{nonce}/")
+    // Avoid empty path segments (`//`) which MinIO rejects as invalid object names.
+    let test_name = test_name.trim_matches('/');
+    if test_name.is_empty() {
+        format!("{prefix}{nonce}/")
+    } else {
+        format!("{prefix}{test_name}/{nonce}/")
+    }
 }
 
 pub fn get_test_bucket() -> String {

@@ -57,13 +57,38 @@ for i in $(seq 1 60); do
   fi
 done
 
-echo "Creating buckets..."
-docker compose -f "$ROOT/docker-compose.yml" run --rm create-buckets
+# Single bucket used by env.sh / integration tests. Reuse if present; create only if missing.
+BUCKET=mountpoint-test
+
+bucket_exists() {
+  local bucket="$1"
+  docker run --rm --network container:mountpoint-minio --entrypoint /bin/sh minio/mc:latest -c "
+    mc alias set local http://127.0.0.1:9000 minioadmin minioadmin >/dev/null &&
+    mc ls \"local/${bucket}\" >/dev/null 2>&1
+  " >/dev/null 2>&1
+}
+
+# Drop the former second bucket if a previous setup created it.
+if bucket_exists "mountpoint-test-2"; then
+  echo "Removing unused bucket: mountpoint-test-2"
+  docker run --rm --network container:mountpoint-minio --entrypoint /bin/sh minio/mc:latest -c "
+    mc alias set local http://127.0.0.1:9000 minioadmin minioadmin >/dev/null &&
+    mc rb --force local/mountpoint-test-2
+  " >/dev/null
+fi
+
+if bucket_exists "$BUCKET"; then
+  echo "Reusing existing bucket: ${BUCKET}"
+else
+  echo "Creating bucket: ${BUCKET}"
+  docker compose -f "$ROOT/docker-compose.yml" run --rm create-buckets
+fi
 
 echo
 echo "MinIO is ready (Docker Compose)."
 echo "  API:     http://127.0.0.1:9000"
 echo "  Console: http://127.0.0.1:9001  (minioadmin / minioadmin)"
+echo "  Bucket:  ${BUCKET}  (reused when present)"
 echo
 echo "Configure your shell with:"
 echo "  source $ROOT/env.sh"

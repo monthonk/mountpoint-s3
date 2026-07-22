@@ -52,6 +52,9 @@ async fn test_addressing_style(addressing_style: AddressingStyle, prefix: &str) 
 #[cfg(feature = "fips_tests")]
 #[tokio::test]
 async fn test_use_fips() {
+    if !require_capability(S3Capability::Fips) {
+        return;
+    }
     let prefix = get_unique_test_prefix("test_fips");
     run_test(get_test_endpoint_config().use_fips(true), &prefix, get_test_bucket()).await;
 }
@@ -61,6 +64,9 @@ async fn test_use_fips() {
 // Transfer acceleration do not work with path style
 #[tokio::test]
 async fn test_use_accelerate() {
+    if !require_capability(S3Capability::TransferAcceleration) {
+        return;
+    }
     let prefix = get_unique_test_prefix("test_transfer_acceleration");
     run_test(
         get_test_endpoint_config().use_accelerate(true),
@@ -76,6 +82,9 @@ async fn test_use_accelerate() {
 #[test_case(AddressingStyle::Path, "test_dual_stack_path_style")]
 #[tokio::test]
 async fn test_addressing_style_dualstack_option(addressing_style: AddressingStyle, prefix: &str) {
+    if !require_capability(S3Capability::DualStack) {
+        return;
+    }
     let prefix = get_unique_test_prefix(prefix);
     run_test(
         get_test_endpoint_config()
@@ -92,6 +101,9 @@ async fn test_addressing_style_dualstack_option(addressing_style: AddressingStyl
 #[cfg(feature = "fips_tests")]
 #[tokio::test]
 async fn test_fips_dual_stack_mount_option() {
+    if !require_capability(S3Capability::Fips) {
+        return;
+    }
     let prefix = get_unique_test_prefix("test_fips_dual_stack");
     run_test(
         get_test_endpoint_config().use_fips(true).use_dual_stack(true),
@@ -110,6 +122,9 @@ async fn test_fips_dual_stack_mount_option() {
 // Also, path-style addressing is not supported for Access Points. But it seems to be supported for single region access point for now.
 #[tokio::test]
 async fn test_single_region_access_point(addressing_style: AddressingStyle, arn: bool, prefix: &str) {
+    if !require_capability(S3Capability::AccessPoints) {
+        return;
+    }
     run_test(
         get_test_endpoint_config().addressing_style(addressing_style),
         &get_unique_test_prefix(prefix),
@@ -138,6 +153,9 @@ async fn run_list_objects_test(endpoint_config: EndpointConfig, prefix: &str, bu
 // Path-style addressing is not supported for Access points
 #[tokio::test]
 async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
+    if !require_capability(S3Capability::AccessPoints) {
+        return;
+    }
     run_list_objects_test(
         get_test_endpoint_config(),
         &get_unique_test_prefix(prefix),
@@ -152,6 +170,9 @@ async fn test_object_lambda_access_point(arn: bool, prefix: &str) {
 // Only ARN is supported for Multi Region access point as AWS CLI.
 #[tokio::test]
 async fn test_multi_region_access_point() {
+    if !require_capability(S3Capability::AccessPoints) {
+        return;
+    }
     let prefix = "test_MRAP";
     run_list_objects_test(
         get_test_endpoint_config(),

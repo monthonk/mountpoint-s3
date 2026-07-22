@@ -14,7 +14,7 @@ async fn test_copy_objects() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_copy_objects");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -26,7 +26,7 @@ async fn test_copy_objects() {
         .unwrap();
 
     let client: S3CrtClient = get_test_client();
-    let copy_key = format!("{prefix}/hello2");
+    let copy_key = object_key(&prefix, "hello2");
 
     let _result = client
         .copy_object(&bucket, &key, &bucket, &copy_key, &Default::default())
@@ -44,6 +44,10 @@ async fn test_copy_objects() {
 
 #[tokio::test]
 async fn test_copy_object_no_permission() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_copy_object_no_permission");
 
     let provider = get_no_permissions_provider().await;
@@ -52,8 +56,8 @@ async fn test_copy_object_no_permission() {
         .endpoint_config(get_test_endpoint_config());
     let client: S3CrtClient = get_test_client_with_config(config);
 
-    let key = format!("{prefix}/hello");
-    let copy_key = format!("{prefix}/hello2");
+    let key = object_key(&prefix, "hello");
+    let copy_key = object_key(&prefix, "hello2");
 
     let err = client
         .copy_object(&bucket, &key, &bucket, &copy_key, &Default::default())
@@ -65,8 +69,8 @@ async fn test_copy_object_no_permission() {
 #[tokio::test]
 async fn test_copy_object_non_existing_key() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_copy_objects");
-    let key = format!("{prefix}/hello");
-    let copy_key = format!("{prefix}/hello2");
+    let key = object_key(&prefix, "hello");
+    let copy_key = object_key(&prefix, "hello2");
 
     let client: S3CrtClient = get_test_client();
     let result = client

@@ -160,10 +160,13 @@ impl HistogramFn for Metric {
 
 /// Test basic metrics emitted by get_object
 async fn test_get_object_metrics() {
+    if !require_capability(S3Capability::AwsS3Hostnames) {
+        return;
+    }
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_metrics");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; 100];
     sdk_client
         .put_object()
@@ -241,6 +244,9 @@ rusty_fork_test! {
 
 /// Test metrics and log messages for a get object error
 async fn test_get_object_metrics_403() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_get_object_metrics_403");
 
     let provider = get_no_permissions_provider().await;
@@ -249,7 +255,7 @@ async fn test_get_object_metrics_403() {
         .endpoint_config(get_test_endpoint_config());
     let client: S3CrtClient = get_test_client_with_config(config);
 
-    let key = format!("{prefix}/nonexistent_key");
+    let key = object_key(&prefix, "nonexistent_key");
 
     // Set up metrics recording
     let recorder = TestRecorder::default();
@@ -352,6 +358,9 @@ rusty_fork_test! {
 
 /// Test metrics and log messages for a head object that gets a 403 error
 async fn test_head_object_403() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
     let (bucket, _prefix) = get_test_bucket_and_prefix("test_head_object_403");
 
     let provider = get_no_permissions_provider().await;
@@ -428,7 +437,7 @@ async fn test_custom_telemetry_callback() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_custom_telemetry_callback");
 
-    let key = format!("{prefix}/test");
+    let key = object_key(&prefix, "test");
     let body = vec![0x42; 100];
     sdk_client
         .put_object()

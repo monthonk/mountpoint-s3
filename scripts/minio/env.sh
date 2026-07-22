@@ -2,21 +2,26 @@
 #   source scripts/minio/env.sh
 #
 # Then run e.g.:
-#   cargo nextest run -p mountpoint-s3-client --features s3_tests get_object
+#   cargo nextest run -p mountpoint-s3-client --features s3_tests
 
 export S3_REGION="${S3_REGION:-us-east-1}"
 export S3_BUCKET_NAME="${S3_BUCKET_NAME:-mountpoint-test}"
-export S3_SECOND_BUCKET_NAME="${S3_SECOND_BUCKET_NAME:-mountpoint-test-2}"
 export S3_BUCKET_TEST_PREFIX="${S3_BUCKET_TEST_PREFIX:-mountpoint-test/}"
 export S3_ENDPOINT_URL="${S3_ENDPOINT_URL:-http://127.0.0.1:9000}"
 # Required for MinIO (and most S3-compatible servers): path-style addressing
 export S3_FORCE_PATH_STYLE="${S3_FORCE_PATH_STYLE:-1}"
+
+# Optional S3 API capabilities of the *target*. Unset or `all` = full Amazon S3 (CI default).
+# MinIO is baseline-only: tests that call require_capability(...) skip when missing.
+# See mountpoint-s3-client/src/test_capabilities.rs and scripts/minio/README.md.
+export S3_TEST_CAPABILITIES="${S3_TEST_CAPABILITIES:-none}"
 
 # Static MinIO credentials (match start.sh / docker-compose)
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-minioadmin}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-minioadmin}"
 # Avoid picking up a real AWS profile/session/web-identity that could override local keys
 # or make the CRT try STS (noisy failures against MinIO).
+# Also clear S3_SECOND_BUCKET_NAME: MinIO setup only provides mountpoint-test.
 unset AWS_PROFILE \
       AWS_SESSION_TOKEN \
       AWS_SECURITY_TOKEN \
@@ -25,6 +30,7 @@ unset AWS_PROFILE \
       AWS_ROLE_SESSION_NAME \
       AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
       AWS_CONTAINER_CREDENTIALS_FULL_URI \
+      S3_SECOND_BUCKET_NAME \
       2>/dev/null || true
 
 # Optional placeholders so tests that only *read* these don't panic at startup
@@ -37,3 +43,4 @@ echo "  S3_ENDPOINT_URL=$S3_ENDPOINT_URL"
 echo "  S3_BUCKET_NAME=$S3_BUCKET_NAME"
 echo "  S3_REGION=$S3_REGION"
 echo "  S3_FORCE_PATH_STYLE=$S3_FORCE_PATH_STYLE"
+echo "  S3_TEST_CAPABILITIES=$S3_TEST_CAPABILITIES"

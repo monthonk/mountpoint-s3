@@ -12,6 +12,11 @@ pub mod fuse;
 #[cfg(feature = "s3_tests")]
 pub mod s3;
 
+// Shared capability helpers (MinIO vs Amazon S3). Not all modules call these yet;
+// allow unused re-exports so crates that only need them for future gates compile cleanly.
+#[allow(unused_imports)]
+pub use mountpoint_s3_client::test_capabilities::{S3Capability, has_capability, object_key, require_capability};
+
 #[cfg(all(test, feature = "manifest"))]
 pub mod manifest;
 

@@ -26,10 +26,17 @@ use mountpoint_s3_crt::common::allocator::Allocator;
 /// Test creating a client with the static credentials provider
 #[tokio::test]
 async fn test_static_provider() {
+    // Needs real AWS-style credentials (long access key id + invalid-key rejection semantics).
+    // MinIO's default `minioadmin` key is only 10 chars, so truncating it for the negative
+    // case is a no-op and the request still succeeds.
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
+
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_static_provider");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -91,7 +98,7 @@ async fn test_profile_provider_static_async() {
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_profile_provider_static");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -164,11 +171,15 @@ async fn test_profile_provider_static_async() {
 }
 
 async fn test_profile_provider_assume_role_async() {
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
+
     let sdk_client = get_test_sdk_client().await;
     let subsession_role = get_subsession_iam_role();
     let (bucket, prefix) = get_test_bucket_and_prefix("test_profile_provider_assume_role");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -237,7 +248,7 @@ async fn test_profile_provider_web_identity_async() {
     let web_identity_role = get_web_identity_test_role();
     let (bucket, prefix) = get_test_bucket_and_prefix("test_profile_provider_web_identity");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -286,7 +297,7 @@ async fn test_profile_provider_web_identity_source_profile_async() {
     let web_identity_role = get_web_identity_test_role();
     let (bucket, prefix) = get_test_bucket_and_prefix("test_profile_provider_web_identity_source_profile");
 
-    let key = format!("{prefix}/hello");
+    let key = object_key(&prefix, "hello");
     let body = b"hello world!";
     sdk_client
         .put_object()
@@ -332,12 +343,17 @@ async fn test_profile_provider_web_identity_source_profile_async() {
 }
 
 async fn test_credential_process_behind_source_profile_async() {
+    // Needs STS session tokens + assume-role (S3_SUBSESSION_IAM_ROLE).
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
+
     let (bucket, prefix) = get_test_bucket_and_prefix("test_credential_process_behind_source_profile");
 
     // Create a test file in "{prefix}/hello"
     {
         let sdk_client = get_test_sdk_client().await;
-        let key = format!("{prefix}/hello");
+        let key = object_key(&prefix, "hello");
         let body = b"hello world!";
         sdk_client
             .put_object()
@@ -450,7 +466,7 @@ async fn test_credential_process_behind_source_profile_async() {
         .endpoint_config(get_test_endpoint_config());
     let client = get_test_client_with_config(config);
     let err = client
-        .list_objects(&bucket, None, "/", 10, &format!("{prefix}/"))
+        .list_objects(&bucket, None, "/", 10, &prefix)
         .await
         .expect_err("should fail when using invalid credentials");
     assert!(matches!(err, ObjectClientError::ClientError(_)));
@@ -503,6 +519,10 @@ rusty_fork_test! {
 async fn test_scoped_credentials() {
     use common::creds::get_scoped_down_credentials;
     use mountpoint_s3_client::S3RequestError;
+
+    if !require_capability(S3Capability::IamSessionPolicies) {
+        return;
+    }
 
     let sdk_client = get_test_sdk_client().await;
     let (bucket, prefix) = get_test_bucket_and_prefix("test_scoped_credentials");
@@ -560,7 +580,7 @@ async fn test_scoped_credentials() {
         ObjectClientError::ClientError(S3RequestError::Forbidden(_, _))
     ));
     let err = client
-        .list_objects(&bucket, None, "/", 10, &format!("{prefix}/"))
+        .list_objects(&bucket, None, "/", 10, &prefix)
         .await
         .expect_err("should fail in different prefix");
     assert!(matches!(

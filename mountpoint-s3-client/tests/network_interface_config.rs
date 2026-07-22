@@ -13,7 +13,7 @@ use mountpoint_s3_client::types::HeadObjectParams;
 #[tokio::test]
 async fn test_empty_list() {
     let (bucket, prefix) = get_test_bucket_and_prefix("test_empty_list");
-    let key = format!("{prefix}/no-such-key");
+    let key = object_key(&prefix, "no-such-key");
 
     let interface_names = Vec::new();
     let config = S3ClientConfig::new()
@@ -33,8 +33,11 @@ async fn test_empty_list() {
 
 #[tokio::test]
 async fn test_one_interface_ok() {
+    if !require_capability(S3Capability::NetworkInterfaces) {
+        return;
+    }
     let (bucket, prefix) = get_test_bucket_and_prefix("test_empty_list");
-    let key = format!("{prefix}/no-such-key");
+    let key = object_key(&prefix, "no-such-key");
 
     let primary_interface = get_primary_interface_name();
     let interface_names = vec![primary_interface];
@@ -58,6 +61,9 @@ async fn test_one_interface_ok() {
 #[test_case(false; "without any valid interface")]
 #[tokio::test]
 async fn test_nonexistent(with_valid_interface: bool) {
+    if !require_capability(S3Capability::NetworkInterfaces) {
+        return;
+    }
     let primary_interface = get_primary_interface_name();
     let non_existent_interface = String::from("none0");
     let interface_names = if with_valid_interface {

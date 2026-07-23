@@ -368,21 +368,13 @@ fn register_skip_summary_atexit() {
 fn record_skip(cap: S3Capability) {
     register_skip_summary_atexit();
 
-    let test_name = std::thread::current()
-        .name()
-        .unwrap_or("<unknown-test>")
-        .to_string();
+    let test_name = std::thread::current().name().unwrap_or("<unknown-test>").to_string();
     let cap_name = cap.as_str();
 
     if let Ok(mut stats) = SKIP_STATS.lock() {
         stats.total += 1;
         *stats.by_capability.entry(cap_name).or_insert(0) += 1;
-        *stats
-            .tests
-            .entry(test_name)
-            .or_default()
-            .entry(cap_name)
-            .or_insert(0) += 1;
+        *stats.tests.entry(test_name).or_default().entry(cap_name).or_insert(0) += 1;
     }
 }
 

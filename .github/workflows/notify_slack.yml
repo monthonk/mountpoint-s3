@@ -12,12 +12,17 @@ permissions:
 jobs:
   notify:
     runs-on: ubuntu-latest
+    # Map secrets to env so steps can skip when unset (secrets cannot be used in `if:`).
+    # Forks without these secrets will skip Slack and keep the job green.
+    env:
+      SLACK_WEBHOOK_URL_ISSUE: ${{ secrets.SLACK_WEBHOOK_URL_ISSUE }}
+      SLACK_WEBHOOK_URL_PR: ${{ secrets.SLACK_WEBHOOK_URL_PR }}
     steps:
       - name: Send issue notification to Slack
-        if: github.event_name == 'issues'
+        if: github.event_name == 'issues' && env.SLACK_WEBHOOK_URL_ISSUE != ''
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL_ISSUE }}
+          webhook: ${{ env.SLACK_WEBHOOK_URL_ISSUE }}
           webhook-type: incoming-webhook
           payload: |
             {
@@ -26,10 +31,10 @@ jobs:
             }
 
       - name: Send pull request notification to Slack
-        if: github.event_name == 'pull_request_target'
+        if: github.event_name == 'pull_request_target' && env.SLACK_WEBHOOK_URL_PR != ''
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL_PR }}
+          webhook: ${{ env.SLACK_WEBHOOK_URL_PR }}
           webhook-type: incoming-webhook
           payload: |
             {

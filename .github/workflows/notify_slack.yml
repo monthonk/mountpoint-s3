@@ -12,17 +12,27 @@ permissions:
 jobs:
   notify:
     runs-on: ubuntu-latest
-    # Map secrets to env so steps can skip when unset (secrets cannot be used in `if:`).
-    # Forks without these secrets will skip Slack and keep the job green.
-    env:
-      SLACK_WEBHOOK_URL_ISSUE: ${{ secrets.SLACK_WEBHOOK_URL_ISSUE }}
-      SLACK_WEBHOOK_URL_PR: ${{ secrets.SLACK_WEBHOOK_URL_PR }}
     steps:
+      # Detect webhooks in a shell step. Secret-backed env vars cannot be used reliably
+      # in `if:` (empty secrets still allow the notify step to run and fail the job).
+      - name: Detect issue webhook
+        id: issue_webhook
+        if: github.event_name == 'issues'
+        env:
+          WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL_ISSUE }}
+        run: |
+          if [ -n "$WEBHOOK" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "SLACK_WEBHOOK_URL_ISSUE is not set; skipping Slack notification."
+          fi
+
       - name: Send issue notification to Slack
-        if: github.event_name == 'issues' && env.SLACK_WEBHOOK_URL_ISSUE != ''
+        if: github.event_name == 'issues' && steps.issue_webhook.outputs.configured == 'true'
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          webhook: ${{ env.SLACK_WEBHOOK_URL_ISSUE }}
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL_ISSUE }}
           webhook-type: incoming-webhook
           payload: |
             {
@@ -30,11 +40,24 @@ jobs:
               "issue_url": "${{ github.event.issue.html_url }}"
             }
 
+      - name: Detect pull request webhook
+        id: pr_webhook
+        if: github.event_name == 'pull_request_target'
+        env:
+          WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL_PR }}
+        run: |
+          if [ -n "$WEBHOOK" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "SLACK_WEBHOOK_URL_PR is not set; skipping Slack notification."
+          fi
+
       - name: Send pull request notification to Slack
-        if: github.event_name == 'pull_request_target' && env.SLACK_WEBHOOK_URL_PR != ''
+        if: github.event_name == 'pull_request_target' && steps.pr_webhook.outputs.configured == 'true'
         uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v3.0.3
         with:
-          webhook: ${{ env.SLACK_WEBHOOK_URL_PR }}
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL_PR }}
           webhook-type: incoming-webhook
           payload: |
             {
